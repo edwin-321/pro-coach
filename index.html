@@ -198,6 +198,8 @@ var EX = {
   goblet:{n:"Goblet Squat",eq:"Kurzhantel",step:2,start:8,rest:120,cue:"Hantel vor der Brust halten, tief in die Hocke, Ellenbogen zwischen die Knie."},
   legcurl:{n:"Beinbeuger liegend",eq:"Maschine",step:2.5,start:15,rest:75,cue:"Hüfte bleibt auf dem Polster. Zügig hoch, 3 Sekunden langsam ablassen."},
   legcurl_s:{n:"Beinbeuger sitzend",eq:"Maschine",step:2.5,start:20,rest:75,cue:"Oberkörper leicht nach vorn, Fersen kräftig unter den Sitz ziehen, langsam zurück."},
+  legext:{n:"Beinstrecker",eq:"Maschine",step:2.5,start:15,rest:75,cue:"Rücken fest an die Lehne, Polster knapp über dem Fuß. Beine ganz strecken, oben 1 Sekunde halten, 3 Sekunden langsam ablassen. Kein Schwung."},
+  legext_1:{n:"Beinstrecker einbeinig",eq:"Maschine",side:1,step:2.5,start:7.5,rest:60,cue:"Ein Bein nach dem anderen. Ganz strecken, oben kurz halten, langsam ablassen."},
   kickback:{n:"Kickback am Kabel",eq:"Kabelzug",side:1,step:2.5,start:5,rest:60,cue:"Leicht vorgebeugt abstützen, Bein aus der Hüfte nach hinten oben führen. Kein Schwung aus dem Rücken."},
   kickback_m:{n:"Kickback an der Maschine",eq:"Maschine",side:1,step:5,start:15,rest:60,cue:"Über die Ferse nach hinten drücken, oben kurz den Po anspannen."},
   ohp:{n:"Schulterdrücken",eq:"Kurzhanteln",hand:1,step:1,start:4,rest:90,cue:"Sitzend, Rücken angelehnt. Hanteln von Ohrhöhe gerade nach oben drücken, Bauch fest."},
@@ -223,6 +225,7 @@ var DAYS = {
   B:{title:"Beine und Oberkörper",slots:[
     {id:"b1",opts:["squat","goblet"],sets:3,min:6,max:10},
     {id:"b2",opts:["legcurl","legcurl_s"],sets:3,min:10,max:15},
+    {id:"b6",opts:["legext","legext_1"],sets:3,min:10,max:15},
     {id:"b3",opts:["kickback","kickback_m"],sets:3,min:12,max:15},
     {id:"b4",opts:["ohp","ohp_m"],sets:3,min:8,max:12},
     {id:"b5",opts:["row","row_kh"],sets:3,min:8,max:12}]},

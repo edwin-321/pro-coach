@@ -1,0 +1,602 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Po-Coach"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style></head><body>
+<title>Po-Coach</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: eine schmale Spalte fürs Handy, oben klebende Statuszeile, unten feste Leiste (Tabs oder Pausen-Timer). */
+:root{
+  --bg:#f6f2f5; --surface:#ffffff; --ink:#221a22; --muted:#6f6373; --line:#e7dfe6;
+  --accent:#b4235f; --accent-ink:#ffffff; --accent-soft:#f8e2eb;
+  --good:#1c7550; --good-soft:#dcf1e7; --warn:#8a5a00; --warn-soft:#fbeed2;
+  --display:"Bricolage Grotesque","Figtree",system-ui,sans-serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#171217; --surface:#231b23; --ink:#f4ecf2; --muted:#ac9cab; --line:#372c37;
+    --accent:#f2709f; --accent-ink:#2b0a18; --accent-soft:#3d1d2c;
+    --good:#62cf9f; --good-soft:#17342a; --warn:#f0c26a; --warn-soft:#3a2d12;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#171217; --surface:#231b23; --ink:#f4ecf2; --muted:#ac9cab; --line:#372c37;
+  --accent:#f2709f; --accent-ink:#2b0a18; --accent-soft:#3d1d2c;
+  --good:#62cf9f; --good-soft:#17342a; --warn:#f0c26a; --warn-soft:#3a2d12;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:0 120px;-webkit-tap-highlight-color:transparent}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top, 0px);z-index:10;background:var(--bg)}
+#app{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:18px;padding-top:18px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;line-height:1.1}
+h1{font-size:30px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:20px;font-weight:800}
+h3{font-size:17px;font-weight:600}
+p{margin:0}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.muted{color:var(--muted)}
+.small{font-size:13.5px}
+.label{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;align-items:center;gap:10px}
+.between{justify-content:space-between}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.btn{display:flex;align-items:center;justify-content:center;min-height:52px;padding:0 20px;border-radius:999px;
+  background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:17px;width:100%}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.btn.sm{min-height:42px;font-size:15px;width:auto}
+.link{color:var(--accent);font-weight:600;font-size:14px;padding:6px 0}
+
+/* Wochenpunkte */
+.week{display:flex;align-items:center;gap:8px}
+.dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--line)}
+.dot.on{background:var(--good);border-color:var(--good)}
+
+/* Tagwahl */
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px}
+.seg button{min-height:40px;border-radius:999px;font-weight:600;font-size:14.5px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.badge{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.badge.good{background:var(--good-soft);color:var(--good)}
+
+/* Übungsliste in der Vorschau */
+.plan{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.plan li{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:12px 0;border-top:1px solid var(--line)}
+.plan li:first-child{border-top:0;padding-top:4px}
+.plan .name{font-weight:600;min-width:0}
+.plan .target{font-weight:700;text-align:right;white-space:nowrap}
+.plan .meta{grid-column:1/-1;display:flex;justify-content:space-between;gap:12px;align-items:center}
+
+/* Training */
+.topbar{position:sticky;top:env(safe-area-inset-top, 0px);z-index:5;background:var(--bg);padding:10px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line)}
+.bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--good);border-radius:3px;transition:width .25s}
+.coach{background:var(--accent-soft);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14.5px}
+.coach.down{background:var(--warn-soft)}
+.coach b{color:var(--accent)}
+.coach.down b{color:var(--warn)}
+details summary{cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;padding:4px 0}
+details p{font-size:14.5px;color:var(--muted);padding-top:4px}
+.sets{display:flex;flex-direction:column;gap:8px}
+.sethead,.set{display:grid;grid-template-columns:20px 1fr 1fr 46px;gap:8px;align-items:center}
+.sethead span{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:center}
+.set{padding:6px;border-radius:12px;border:1px solid var(--line)}
+.set .idx{text-align:center;font-weight:700;color:var(--muted)}
+.step{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;align-items:center;background:var(--bg);border-radius:10px}
+.step button{height:42px;font-size:20px;font-weight:600;color:var(--muted)}
+.step input{width:100%;min-width:0;height:42px;border:0;background:transparent;color:var(--ink);text-align:center;font:700 17px var(--body);font-variant-numeric:tabular-nums;padding:0}
+.check{width:46px;height:46px;border-radius:12px;border:2px solid var(--line);display:grid;place-items:center;color:transparent}
+.check svg{width:22px;height:22px}
+.set.done{background:var(--good-soft);border-color:transparent}
+.set.done .check{background:var(--good);border-color:var(--good);color:var(--surface)}
+.set.done .step{background:transparent}
+
+/* feste Leisten unten */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:8;background:var(--surface);border-top:1px solid var(--line);
+  padding:8px max(16px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))}
+.dock .in{max-width:520px;margin:0 auto}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.tabs button{min-height:48px;border-radius:12px;font-weight:600;font-size:14.5px;color:var(--muted)}
+.tabs button[aria-current="page"]{background:var(--accent-soft);color:var(--accent)}
+.timer{font:800 26px var(--display);font-variant-numeric:tabular-nums}
+
+/* Fortschritt */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.stat b{display:block;font:800 26px var(--display);font-variant-numeric:tabular-nums}
+.spark{width:100%;height:56px;display:block}
+.spark .ln{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.spark .ar{fill:var(--accent-soft);stroke:none}
+.spark .pt{fill:var(--accent)}
+.spark .gr{stroke:var(--line);stroke-width:1;fill:none}
+textarea{width:100%;min-height:110px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:13px ui-monospace,Menlo,monospace;padding:10px}
+.sheet{position:fixed;inset:0;z-index:20;background:rgba(20,10,18,.55);display:flex;align-items:flex-end;justify-content:center;
+  padding:16px max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))}
+.sheet .card{width:100%;max-width:520px}
+.notice{background:var(--warn-soft);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px}
+@media (prefers-reduced-motion: reduce){.bar i{transition:none}}
+</style>
+
+<div id="app"></div>
+<div id="dock" class="dock"></div>
+<div id="sheet" hidden></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- Übungen ---------- */
+// step = kleinste sinnvolle Steigerung in kg, start = vorsichtiges Startgewicht, rest = Pause in Sekunden
+var EX = {
+  hipthrust:{n:"Hip Thrust",eq:"Langhantel",step:5,start:30,rest:120,cue:"Schulterblätter auf die Bank, Kinn Richtung Brust. Füße so stellen, dass die Schienbeine oben senkrecht stehen. Oben 1 Sekunde den Po fest anspannen, nicht ins Hohlkreuz drücken."},
+  glutebridge:{n:"Glute Bridge an der Maschine",eq:"Maschine",step:5,start:30,rest:120,cue:"Rücken flach, Becken leicht nach hinten kippen. Über die Fersen hochdrücken und oben 1 Sekunde halten."},
+  rdl:{n:"Rumänisches Kreuzheben",eq:"Langhantel",step:2.5,start:20,rest:120,cue:"Knie leicht gebeugt, Po weit nach hinten schieben, Hantel dicht an den Beinen. Runter bis du die Dehnung hinten im Oberschenkel spürst, Rücken bleibt gerade."},
+  rdl_kh:{n:"Kreuzheben mit Kurzhanteln",eq:"Kurzhanteln",hand:1,step:2,start:8,rest:120,cue:"Wie rumänisches Kreuzheben: Po nach hinten, Hanteln dicht an den Beinen, Rücken gerade."},
+  bss:{n:"Bulgarian Split Squat",eq:"Kurzhanteln",hand:1,side:1,step:1,start:4,rest:90,cue:"Hinteren Fuß auf die Bank, großer Schritt nach vorn. Oberkörper leicht vorlehnen und über die vordere Ferse hochdrücken. So trifft es den Po statt den Oberschenkel."},
+  revlunge:{n:"Ausfallschritt rückwärts",eq:"Kurzhanteln",hand:1,side:1,step:1,start:4,rest:90,cue:"Großer Schritt nach hinten, Gewicht bleibt auf der vorderen Ferse. Oberkörper leicht vorlehnen."},
+  abd:{n:"Abduktoren-Maschine",eq:"Maschine",step:5,start:25,rest:75,cue:"Oberkörper leicht nach vorn lehnen, Knie kontrolliert nach außen drücken, außen kurz halten und langsam zurück."},
+  abd_kabel:{n:"Abduktion am Kabel",eq:"Kabelzug",side:1,step:2.5,start:5,rest:75,cue:"Seitlich zum Kabel stehen, Bein gestreckt zur Seite führen, Hüfte bleibt ruhig."},
+  lat:{n:"Latzug",eq:"Kabelzug",step:2.5,start:25,rest:90,cue:"Brust raus, Stange zur oberen Brust ziehen, Ellenbogen Richtung Hosentaschen. Nicht mit Schwung."},
+  pullup:{n:"Klimmzug mit Unterstützung",eq:"Maschine",step:5,start:40,rest:90,cue:"Hier gilt umgekehrt: weniger Unterstützung ist schwerer. Trage das Unterstützungsgewicht ein und reduziere es, wenn du alle Sätze schaffst.",inv:1},
+  squat:{n:"Kniebeuge",eq:"Langhantel",step:2.5,start:20,rest:150,cue:"Füße etwas breiter als hüftbreit, Zehen leicht nach außen. Tief gehen, Knie folgen den Zehen, Brust bleibt oben."},
+  goblet:{n:"Goblet Squat",eq:"Kurzhantel",step:2,start:8,rest:120,cue:"Hantel vor der Brust halten, tief in die Hocke, Ellenbogen zwischen die Knie."},
+  legcurl:{n:"Beinbeuger liegend",eq:"Maschine",step:2.5,start:15,rest:75,cue:"Hüfte bleibt auf dem Polster. Zügig hoch, 3 Sekunden langsam ablassen."},
+  legcurl_s:{n:"Beinbeuger sitzend",eq:"Maschine",step:2.5,start:20,rest:75,cue:"Oberkörper leicht nach vorn, Fersen kräftig unter den Sitz ziehen, langsam zurück."},
+  kickback:{n:"Kickback am Kabel",eq:"Kabelzug",side:1,step:2.5,start:5,rest:60,cue:"Leicht vorgebeugt abstützen, Bein aus der Hüfte nach hinten oben führen. Kein Schwung aus dem Rücken."},
+  kickback_m:{n:"Kickback an der Maschine",eq:"Maschine",side:1,step:5,start:15,rest:60,cue:"Über die Ferse nach hinten drücken, oben kurz den Po anspannen."},
+  ohp:{n:"Schulterdrücken",eq:"Kurzhanteln",hand:1,step:1,start:4,rest:90,cue:"Sitzend, Rücken angelehnt. Hanteln von Ohrhöhe gerade nach oben drücken, Bauch fest."},
+  ohp_m:{n:"Schulterpresse",eq:"Maschine",step:2.5,start:10,rest:90,cue:"Griffe von Ohrhöhe nach oben drücken, Schultern nicht zu den Ohren ziehen."},
+  row:{n:"Rudern am Kabel",eq:"Kabelzug",step:2.5,start:20,rest:90,cue:"Aufrecht sitzen, Griff zum Bauchnabel ziehen, Schulterblätter hinten zusammen. Oberkörper schwingt nicht mit."},
+  row_kh:{n:"Kurzhantel-Rudern",eq:"Kurzhantel",side:1,step:1,start:6,rest:90,cue:"Eine Hand auf der Bank abstützen, Hantel zur Hüfte ziehen, Ellenbogen dicht am Körper."},
+  legpress:{n:"Beinpresse, Füße hoch und breit",eq:"Maschine",step:5,start:40,rest:120,cue:"Füße hoch und breit auf die Platte, damit der Po arbeitet. Tief ablassen, ohne dass der untere Rücken sich vom Polster hebt. Knie oben nicht durchstrecken."},
+  hack:{n:"Kniebeuge an der Multipresse",eq:"Multipresse",step:2.5,start:20,rest:120,cue:"Füße etwas vor die Stange stellen, tief gehen, über die Fersen hochdrücken."},
+  lunge:{n:"Ausfallschritte im Gehen",eq:"Kurzhanteln",hand:1,side:1,step:1,start:4,rest:90,cue:"Große Schritte, Oberkörper leicht vor, aus der vorderen Ferse hochdrücken."},
+  stepup:{n:"Step-up auf die Bank",eq:"Kurzhanteln",hand:1,side:1,step:1,start:4,rest:90,cue:"Ganzen Fuß auf die Bank, nur mit dem oberen Bein hochdrücken, 3 Sekunden langsam ablassen."},
+  hyper:{n:"Hyperextension für den Po",eq:"Rückenstrecker",step:2.5,start:0,rest:75,cue:"Polster unter die Hüfte, Füße leicht nach außen drehen, oberen Rücken rund lassen. Aus dem Po hochkommen und oben fest anspannen. 0 kg heißt ohne Zusatzgewicht."},
+  pullthrough:{n:"Cable Pull-Through",eq:"Kabelzug",step:2.5,start:15,rest:75,cue:"Rücken zum Kabel, Seil zwischen den Beinen. Po weit nach hinten, dann Hüfte kräftig nach vorn strecken."},
+  chest:{n:"Brustpresse",eq:"Maschine",step:2.5,start:15,rest:90,cue:"Schulterblätter nach hinten unten, Griffe auf Brusthöhe. Kontrolliert drücken, Ellenbogen nicht ganz durchstrecken."},
+  bench_kh:{n:"Kurzhantel-Bankdrücken",eq:"Kurzhanteln",hand:1,step:1,start:5,rest:90,cue:"Hanteln neben der Brust ablassen, Ellenbogen etwa 45 Grad vom Körper, gerade hochdrücken."}
+};
+var DAYS = {
+  A:{title:"Po-Fokus",slots:[
+    {id:"a1",opts:["hipthrust","glutebridge"],sets:3,min:8,max:12},
+    {id:"a2",opts:["rdl","rdl_kh"],sets:3,min:8,max:12},
+    {id:"a3",opts:["bss","revlunge"],sets:3,min:8,max:12},
+    {id:"a4",opts:["abd","abd_kabel"],sets:3,min:12,max:20},
+    {id:"a5",opts:["lat","pullup"],sets:3,min:8,max:12}]},
+  B:{title:"Beine und Oberkörper",slots:[
+    {id:"b1",opts:["squat","goblet"],sets:3,min:6,max:10},
+    {id:"b2",opts:["legcurl","legcurl_s"],sets:3,min:10,max:15},
+    {id:"b3",opts:["kickback","kickback_m"],sets:3,min:12,max:15},
+    {id:"b4",opts:["ohp","ohp_m"],sets:3,min:8,max:12},
+    {id:"b5",opts:["row","row_kh"],sets:3,min:8,max:12}]},
+  C:{title:"Po und Rückseite",slots:[
+    {id:"c1",opts:["hipthrust","glutebridge"],sets:3,min:8,max:12},
+    {id:"c2",opts:["legpress","hack"],sets:3,min:10,max:15},
+    {id:"c3",opts:["lunge","stepup"],sets:3,min:10,max:12},
+    {id:"c4",opts:["hyper","pullthrough"],sets:3,min:12,max:15},
+    {id:"c5",opts:["chest","bench_kh"],sets:3,min:8,max:12},
+    {id:"c6",opts:["abd","abd_kabel"],sets:2,min:12,max:20}]}
+};
+var ORDER = ["A","B","C"];
+var KEY = "pocoach.v1";
+
+/* ---------- Speicher ---------- */
+var storageOk = true;
+var state = {v:1,sessions:[],swaps:{},draft:null};
+function load(){
+  try{
+    var raw = localStorage.getItem(KEY);
+    if(raw){ var s = clean(JSON.parse(raw)); if(s) state = s; }
+  }catch(e){ storageOk = false; }
+  try{ localStorage.setItem(KEY+".t","1"); }catch(e){ storageOk = false; }
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){ storageOk = false; }
+}
+function numOr(x,d){ x = Number(x); return isFinite(x) && x >= 0 ? x : d; }
+// nimmt nur bekannte Felder und Zahlen an, damit eine eingespielte Sicherung nichts kaputt macht
+function clean(s){
+  if(!s || typeof s !== "object" || !Array.isArray(s.sessions)) return null;
+  var out = {v:1,sessions:[],swaps:{},draft:null};
+  s.sessions.forEach(function(x){
+    if(!x || !DAYS[x.day] || !Array.isArray(x.entries)) return;
+    var t = Number(x.date); if(!isFinite(t)) return;
+    var entries = [];
+    x.entries.forEach(function(e){
+      if(!e || !EX[e.ex] || !Array.isArray(e.sets)) return;
+      var sets = e.sets.map(function(z){ return {w:numOr(z && z.w,0), r:Math.round(numOr(z && z.r,0))}; }).filter(function(z){ return z.r > 0; });
+      if(sets.length) entries.push({ex:e.ex,sets:sets});
+    });
+    if(entries.length) out.sessions.push({date:t,day:x.day,entries:entries});
+  });
+  out.sessions.sort(function(a,b){ return a.date - b.date; });
+  if(s.swaps && typeof s.swaps === "object"){
+    Object.keys(s.swaps).forEach(function(k){ if(EX[s.swaps[k]]) out.swaps[k] = s.swaps[k]; });
+  }
+  var d = s.draft;
+  if(d && DAYS[d.day] && Array.isArray(d.items)){
+    var items = [];
+    d.items.forEach(function(it){
+      if(!it || !EX[it.ex] || !Array.isArray(it.sets)) return;
+      items.push({ex:it.ex,min:numOr(it.min,8),max:numOr(it.max,12),kind:String(it.kind||"start"),w:numOr(it.w,0),
+        targets:(Array.isArray(it.targets)?it.targets:[]).map(function(n){return numOr(n,8);}),
+        last:(Array.isArray(it.last)?it.last:[]).map(function(n){return numOr(n,0);}),lastW:numOr(it.lastW,0),
+        sets:it.sets.map(function(z){ return {w:numOr(z && z.w,0), r:Math.round(numOr(z && z.r,0)), done:!!(z && z.done)}; })});
+    });
+    if(items.length) out.draft = {day:d.day,start:numOr(d.start,Date.now()),restEnd:numOr(d.restEnd,0),items:items};
+  }
+  return out;
+}
+
+/* ---------- Coach-Logik ---------- */
+function hist(ex){
+  var h = [];
+  state.sessions.forEach(function(s){ s.entries.forEach(function(e){ if(e.ex === ex) h.push({date:s.date,sets:e.sets}); }); });
+  return h;
+}
+function topW(sets){ return sets.reduce(function(m,s){ return Math.max(m,s.w); },0); }
+function total(sets){ return sets.reduce(function(m,s){ return m + s.r; },0); }
+function best(sets){ return sets.reduce(function(b,s){ return (!b || s.w > b.w || (s.w === b.w && s.r > b.r)) ? s : b; },null); }
+function roundStep(x,step){ return Math.max(0, Math.round(x/step)*step); }
+
+// Doppelte Progression: erst Wiederholungen bis zum oberen Ende steigern, dann Gewicht erhöhen.
+function recommend(ex,slot){
+  var e = EX[ex], h = hist(ex), n = slot.sets, i, t = [];
+  if(!h.length){
+    for(i=0;i<n;i++) t.push(slot.min);
+    return {kind:"start",w:e.start,targets:t,last:[],lastW:0};
+  }
+  var last = h[h.length-1], lw = topW(last.sets), reps = last.sets.map(function(s){return s.r;});
+  var allMax = reps.length >= Math.min(2,n) && reps.every(function(r){ return r >= slot.max; });
+  var dir = e.inv ? -1 : 1; // bei Unterstützung ist weniger Gewicht schwerer
+  if(allMax){
+    for(i=0;i<n;i++) t.push(slot.min);
+    return {kind:"up",w:Math.max(0,lw + dir*e.step),targets:t,last:reps,lastW:lw};
+  }
+  if(reps[0] < slot.min){
+    for(i=0;i<n;i++) t.push(slot.min);
+    return {kind:"down",w:Math.max(0,lw - dir*e.step),targets:t,last:reps,lastW:lw};
+  }
+  if(h.length >= 3){
+    var a = h[h.length-3], b = h[h.length-2];
+    if(topW(a.sets) === lw && topW(b.sets) === lw && total(last.sets) <= total(a.sets)){
+      var mid = Math.round((slot.min + slot.max)/2);
+      for(i=0;i<n;i++) t.push(mid);
+      var dw = e.inv ? lw + e.step : roundStep(lw*0.9, e.step);
+      if(dw === lw && !e.inv) dw = Math.max(0, lw - e.step);
+      return {kind:"reset",w:dw,targets:t,last:reps,lastW:lw};
+    }
+  }
+  for(i=0;i<n;i++){
+    var prev = reps[Math.min(i,reps.length-1)];
+    t.push(Math.max(slot.min, Math.min(slot.max, prev + 1)));
+  }
+  return {kind:"reps",w:lw,targets:t,last:reps,lastW:lw};
+}
+function coachText(it){
+  var e = EX[it.ex], last = it.last.join(" / ");
+  if(it.kind === "start") return "<b>Erstes Mal.</b> Der Startwert ist vorsichtig gewählt. Nimm ein Gewicht, bei dem du " + it.min + " saubere Wiederholungen schaffst und am Ende noch 2 gegangen wären. Trag ein, was du wirklich genommen hast.";
+  if(it.kind === "up") return "<b>Heute mehr Gewicht.</b> Letztes Mal alle Sätze mit " + it.max + " Wdh. bei " + kg(it.lastW,e) + " geschafft. Jetzt " + kg(it.w,e) + " und wieder bei " + it.min + " Wdh. anfangen.";
+  if(it.kind === "down") return "<b>Etwas leichter.</b> Letztes Mal war " + kg(it.lastW,e) + " zu schwer (" + last + " Wdh.). Mit " + kg(it.w,e) + " kommst du sauber in den Bereich " + it.min + " bis " + it.max + ".";
+  if(it.kind === "reset") return "<b>Neu Anlauf nehmen.</b> Seit drei Einheiten geht es bei " + kg(it.lastW,e) + " nicht voran. Heute " + kg(it.w,e) + ", saubere Technik, danach steigerst du wieder.";
+  return "<b>Gleiches Gewicht, mehr Wiederholungen.</b> Letztes Mal " + last + " Wdh. bei " + kg(it.lastW,e) + ". Heute pro Satz eine mehr. Bei " + it.max + " in allen Sätzen gibt es mehr Gewicht.";
+}
+
+/* ---------- Helfer ---------- */
+function de(n){ return Number(n).toLocaleString("de-DE",{maximumFractionDigits:2}); }
+function kg(w,e){ if(!w) return "ohne Gewicht"; return de(w) + " kg" + (e && e.hand ? " je Hand" : ""); }
+function chosen(slot){ var c = state.swaps[slot.id]; return slot.opts.indexOf(c) >= 0 ? c : slot.opts[0]; }
+function nextDay(){
+  var s = state.sessions; if(!s.length) return "A";
+  return ORDER[(ORDER.indexOf(s[s.length-1].day)+1) % 3];
+}
+function monday(t){ var d = new Date(t); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay()+6)%7)); return d.getTime(); }
+function weekCount(){ var m = monday(Date.now()); return state.sessions.filter(function(s){ return s.date >= m; }).length; }
+function streak(){
+  var wk = 7*864e5, m = monday(Date.now()), n = 0;
+  function cnt(a){ return state.sessions.filter(function(s){ var x = monday(s.date); return x === a; }).length; }
+  if(cnt(m) >= 3) n++;
+  for(var a = monday(m - 3*864e5); cnt(a) >= 3; a = monday(a - 3*864e5)) n++;
+  return n;
+}
+function dateStr(t){ return new Date(t).toLocaleDateString("de-DE",{weekday:"short",day:"numeric",month:"short"}); }
+function parseNum(v){ var x = parseFloat(String(v).replace(",",".")); return isFinite(x) && x >= 0 ? x : 0; }
+var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+/* ---------- Oberfläche ---------- */
+var ui = {tab:"train",day:null,summary:null,confirmReset:false,backupMsg:""};
+var app = document.getElementById("app"), dock = document.getElementById("dock"), sheet = document.getElementById("sheet");
+
+function render(){
+  var html;
+  if(state.draft) html = viewWorkout();
+  else if(ui.summary) html = viewSummary();
+  else if(ui.tab === "progress") html = viewProgress();
+  else if(ui.tab === "settings") html = viewSettings();
+  else html = viewHome();
+  app.innerHTML = html;
+  renderDock();
+}
+function renderDock(){
+  if(state.draft){
+    dock.innerHTML = '<div class="in row between"><div><div class="label" id="restLabel">Pause</div><div class="timer" id="restTime">0:00</div></div>' +
+      '<div class="row"><button class="btn sm ghost" data-act="skipRest" id="skipRest">Pause überspringen</button><button class="btn sm" data-act="askFinish">Fertig</button></div></div>';
+    tick();
+    return;
+  }
+  if(ui.summary){ dock.innerHTML = '<div class="in"><button class="btn" data-act="closeSummary">Weiter</button></div>'; return; }
+  var tabs = [["train","Training"],["progress","Fortschritt"],["settings","Sicherung"]];
+  dock.innerHTML = '<nav class="in tabs" aria-label="Bereiche">' + tabs.map(function(t){
+    return '<button data-act="tab" data-tab="'+t[0]+'"'+(ui.tab===t[0]?' aria-current="page"':'')+'>'+t[1]+'</button>';
+  }).join("") + '</nav>';
+}
+
+function viewHome(){
+  var nd = nextDay(), day = ui.day || nd, D = DAYS[day], wc = weekCount();
+  var dots = ""; for(var i=0;i<3;i++) dots += '<span class="dot'+(i<wc?' on':'')+'"></span>';
+  var weekTxt = wc >= 3 ? "Wochenziel geschafft" : wc + " von 3 Trainings diese Woche";
+  var h = '<header class="stack"><h1>Po-Coach</h1><div class="week" role="img" aria-label="'+weekTxt+'">'+dots+'<span class="small muted">'+weekTxt+'</span></div></header>';
+  if(!storageOk) h += '<p class="notice">Dieser Browser speichert gerade nichts dauerhaft (zum Beispiel im privaten Modus). Deine Einträge wären nach dem Schließen weg.</p>';
+  h += '<div class="seg" role="group" aria-label="Trainingstag">' + ORDER.map(function(k){
+    return '<button data-act="day" data-day="'+k+'" aria-pressed="'+(k===day)+'">Tag '+k+(k===nd?' ·  dran':'')+'</button>';
+  }).join("") + '</div>';
+  h += '<section class="card stack"><div class="row between"><div><div class="label">Tag '+day+'</div><h2>'+D.title+'</h2></div>' +
+       (day===nd?'<span class="badge">heute dran</span>':'')+'</div><ul class="plan">';
+  D.slots.forEach(function(slot){
+    var ex = chosen(slot), e = EX[ex], r = recommend(ex,slot);
+    var tr = r.targets[0] === slot.min && r.kind !== "reps" ? slot.min+"–"+slot.max : Math.min.apply(null,r.targets)+"–"+slot.max;
+    h += '<li><span class="name">'+e.n+'</span><span class="target num">'+(r.w?de(r.w)+" kg":"ohne Gew.")+'</span>' +
+         '<span class="meta small muted"><span>'+slot.sets+' Sätze · '+tr+' Wdh.'+(e.side?' je Seite':'')+(e.hand?' · je Hand':'')+'</span>' +
+         '<button class="link" data-act="swap" data-slot="'+slot.id+'" aria-label="'+e.n+' gegen Alternative tauschen">tauschen</button></span></li>';
+  });
+  h += '</ul><button class="btn" data-act="start" data-day="'+day+'">Training starten</button></section>';
+  h += '<section class="card stack"><h3>So steigerst du dich</h3>' +
+       '<p class="small muted">Der Coach gibt dir für jede Übung Gewicht und Wiederholungen vor. Schaffst du in allen Sätzen die obere Zahl, bekommst du beim nächsten Mal mehr Gewicht. Sonst bleibst du beim Gewicht und machst pro Satz eine Wiederholung mehr.</p>' +
+       '<p class="small muted">Jeder Satz endet, wenn noch etwa 1 bis 2 saubere Wiederholungen möglich wären. Zwischen zwei Trainings liegt ein Ruhetag, zum Beispiel Montag, Mittwoch, Freitag.</p></section>';
+  return h;
+}
+
+function startDraft(day){
+  var items = DAYS[day].slots.map(function(slot){
+    var ex = chosen(slot), r = recommend(ex,slot);
+    return {ex:ex,min:slot.min,max:slot.max,kind:r.kind,w:r.w,targets:r.targets,last:r.last,lastW:r.lastW,
+      sets:r.targets.map(function(t){ return {w:r.w,r:t,done:false}; })};
+  });
+  state.draft = {day:day,start:Date.now(),restEnd:0,items:items};
+  save(); wake(); render(); window.scrollTo(0,0);
+}
+function doneCount(){ var d=0,t=0; state.draft.items.forEach(function(it){ it.sets.forEach(function(s){ t++; if(s.done) d++; }); }); return [d,t]; }
+
+function viewWorkout(){
+  var dr = state.draft, c = doneCount();
+  var h = '<div class="topbar"><div style="flex:1;min-width:0"><div class="row between"><b>Tag '+dr.day+' · '+DAYS[dr.day].title+'</b><span class="small muted num" id="prog">'+c[0]+' / '+c[1]+' Sätze</span></div>' +
+          '<div class="bar" style="margin-top:8px"><i id="progbar" style="width:'+(c[1]?c[0]/c[1]*100:0)+'%"></i></div></div></div>';
+  dr.items.forEach(function(it,i){
+    var e = EX[it.ex];
+    h += '<section class="card stack"><div><div class="label">'+e.eq+(e.side?' · je Seite':'')+'</div><h2>'+e.n+'</h2></div>' +
+         '<p class="num" style="font-weight:700">Ziel: '+kg(it.w,e)+' × '+it.min+'–'+it.max+' Wdh.</p>' +
+         '<p class="coach'+(it.kind==="down"||it.kind==="reset"?' down':'')+'">'+coachText(it)+'</p>' +
+         '<details><summary>Technik</summary><p>'+e.cue+'</p></details>' +
+         '<div class="sets"><div class="sethead"><span></span><span>kg'+(e.hand?' je Hand':'')+'</span><span>Wdh.</span><span></span></div>';
+    it.sets.forEach(function(s,j){
+      h += '<div class="set'+(s.done?' done':'')+'" id="set-'+i+'-'+j+'"><span class="idx num">'+(j+1)+'</span>' +
+           stepper("w",i,j,de(s.w),"decimal","Gewicht Satz "+(j+1)) + stepper("r",i,j,s.r,"numeric","Wiederholungen Satz "+(j+1)) +
+           '<button class="check" data-act="check" data-i="'+i+'" data-j="'+j+'" aria-pressed="'+s.done+'" aria-label="Satz '+(j+1)+' erledigt">'+CHECK+'</button></div>';
+    });
+    h += '</div><button class="link" data-act="addSet" data-i="'+i+'" style="align-self:flex-start">+ weiterer Satz</button></section>';
+  });
+  h += '<button class="btn ghost" data-act="askCancel">Training abbrechen</button>';
+  return h;
+}
+function stepper(f,i,j,val,mode,label){
+  return '<div class="step"><button data-act="dec" data-f="'+f+'" data-i="'+i+'" data-j="'+j+'" aria-label="'+label+' weniger">−</button>' +
+    '<input id="'+f+'-'+i+'-'+j+'" data-f="'+f+'" data-i="'+i+'" data-j="'+j+'" type="text" inputmode="'+mode+'" value="'+val+'" aria-label="'+label+'" autocomplete="off">' +
+    '<button data-act="inc" data-f="'+f+'" data-i="'+i+'" data-j="'+j+'" aria-label="'+label+' mehr">+</button></div>';
+}
+function updProg(){
+  var c = doneCount(), p = document.getElementById("prog"), b = document.getElementById("progbar");
+  if(p) p.textContent = c[0]+" / "+c[1]+" Sätze";
+  if(b) b.style.width = (c[1]?c[0]/c[1]*100:0)+"%";
+}
+
+function finish(){
+  var dr = state.draft, entries = [], records = [], sets = 0, vol = 0;
+  dr.items.forEach(function(it){
+    var done = it.sets.filter(function(s){ return s.done && s.r > 0; }).map(function(s){ return {w:s.w,r:s.r}; });
+    if(!done.length) return;
+    var e = EX[it.ex], h = hist(it.ex), nb = best(done);
+    if(h.length){
+      var pb = best([].concat.apply([],h.map(function(x){return x.sets;})));
+      var better = e.inv ? (nb.w < pb.w || (nb.w === pb.w && nb.r > pb.r)) : (nb.w > pb.w || (nb.w === pb.w && nb.r > pb.r));
+      if(better) records.push(e.n + ": " + kg(nb.w,e) + " × " + nb.r);
+    }
+    done.forEach(function(s){ sets++; vol += s.w * s.r * (e.hand?2:1); });
+    entries.push({ex:it.ex,sets:done});
+  });
+  var mins = Math.max(1, Math.round((Date.now() - dr.start)/6e4));
+  state.draft = null;
+  if(entries.length){
+    state.sessions.push({date:Date.now(),day:dr.day,entries:entries});
+    ui.summary = {day:dr.day,sets:sets,vol:Math.round(vol),mins:mins,records:records,first:state.sessions.length===1};
+  }
+  ui.day = null; save(); unwake(); closeSheet(); render(); window.scrollTo(0,0);
+}
+function viewSummary(){
+  var s = ui.summary, wc = weekCount();
+  var h = '<header class="stack" style="padding-top:20px"><span class="badge good" style="align-self:flex-start">Tag '+s.day+' gespeichert</span><h1>Stark gemacht.</h1>' +
+          '<p class="muted">'+(wc>=3?"Wochenziel erreicht: drei Trainings.":"Das war Training "+wc+" von 3 in dieser Woche.")+' Nächstes Mal ist Tag '+nextDay()+' dran.</p></header>' +
+          '<div class="stats"><div class="stat"><b>'+s.sets+'</b><span class="small muted">Sätze</span></div><div class="stat"><b>'+de(s.vol)+'</b><span class="small muted">kg bewegt</span></div><div class="stat"><b>'+s.mins+'</b><span class="small muted">Minuten</span></div></div>';
+  if(s.records.length){
+    h += '<section class="card stack"><h3>Neue Bestleistungen</h3>' + s.records.map(function(r){ return '<p class="num">'+r+'</p>'; }).join("") + '</section>';
+  } else if(s.first){
+    h += '<section class="card"><p class="muted">Deine Startwerte stehen. Ab dem nächsten Training rechnet der Coach mit deinen echten Zahlen.</p></section>';
+  }
+  h += '<section class="card"><p class="small muted">Für den Muskelaufbau zählt jetzt Erholung: genug Eiweiß (etwa 1,6 g pro kg Körpergewicht am Tag), ausreichend Schlaf und ein Tag Pause vor dem nächsten Training.</p></section>';
+  return h;
+}
+
+function spark(vals){
+  var W = 300, H = 56, p = 6, min = Math.min.apply(null,vals), max = Math.max.apply(null,vals), span = max - min || 1;
+  var pts = vals.map(function(v,i){
+    var x = vals.length === 1 ? W/2 : p + i*(W-2*p)/(vals.length-1);
+    var y = max === min ? H/2 : H - p - (v-min)/span*(H-2*p);
+    return [Math.round(x*10)/10, Math.round(y*10)/10];
+  });
+  var line = pts.map(function(q){ return q.join(","); }).join(" "), lastP = pts[pts.length-1];
+  var s = '<svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true"><path class="gr" d="M0 '+(H-1)+'H'+W+'"/>';
+  if(pts.length > 1) s += '<polygon class="ar" points="'+pts[0][0]+','+H+' '+line+' '+lastP[0]+','+H+'"/><polyline class="ln" points="'+line+'"/>';
+  return s + '<circle class="pt" cx="'+lastP[0]+'" cy="'+lastP[1]+'" r="4"/></svg>';
+}
+function viewProgress(){
+  var h = '<header><h1>Fortschritt</h1></header>' +
+    '<div class="stats"><div class="stat"><b>'+state.sessions.length+'</b><span class="small muted">Trainings</span></div><div class="stat"><b>'+weekCount()+'/3</b><span class="small muted">diese Woche</span></div><div class="stat"><b>'+streak()+'</b><span class="small muted">volle Wochen in Folge</span></div></div>';
+  if(!state.sessions.length){
+    return h + '<section class="card stack"><h3>Noch keine Einträge</h3><p class="muted">Nach deinem ersten Training siehst du hier für jede Übung, wie sich dein Gewicht entwickelt und was deine Bestleistung ist.</p></section>';
+  }
+  var seen = {}, order = [];
+  ORDER.forEach(function(k){ DAYS[k].slots.forEach(function(sl){ sl.opts.forEach(function(x){ if(!seen[x]){ seen[x]=1; order.push(x); } }); }); });
+  order.forEach(function(ex){
+    var hh = hist(ex); if(!hh.length) return;
+    var e = EX[ex], vals = hh.map(function(x){ return topW(x.sets); }), b = best([].concat.apply([],hh.map(function(x){return x.sets;})));
+    var diff = vals[vals.length-1] - vals[0];
+    var dTxt = hh.length < 2 ? "erster Eintrag" : (diff === 0 ? "gleiches Gewicht wie am Anfang" : (diff>0?"+":"−")+de(Math.abs(diff))+" kg seit dem Start");
+    h += '<section class="card stack"><div class="row between"><h3>'+e.n+'</h3><span class="num" style="font-weight:700;white-space:nowrap">'+(vals[vals.length-1]?de(vals[vals.length-1])+" kg":"ohne Gew.")+'</span></div>' +
+         spark(vals) + '<div class="row between small muted"><span>'+dTxt+'</span><span class="num">Bestwert '+kg(b.w,e)+' × '+b.r+'</span></div></section>';
+  });
+  h += '<section class="card stack"><h3>Letzte Trainings</h3><ul class="plan">';
+  state.sessions.slice(-8).reverse().forEach(function(s){
+    var n = s.entries.reduce(function(m,e){ return m + e.sets.length; },0);
+    h += '<li><span class="name">'+dateStr(s.date)+'</span><span class="target">Tag '+s.day+'</span><span class="meta small muted"><span>'+s.entries.length+' Übungen · '+n+' Sätze</span></span></li>';
+  });
+  return h + '</ul></section>';
+}
+
+function viewSettings(){
+  var h = '<header class="stack"><h1>Sicherung</h1><p class="muted">Deine Einträge liegen nur in diesem Browser auf diesem Handy. Kopiere ab und zu eine Sicherung, zum Beispiel in deine Notizen. Damit kannst du alles wiederherstellen oder auf ein neues Handy mitnehmen.</p></header>' +
+    '<section class="card stack"><h3>Sicherung kopieren</h3><textarea id="backupOut" readonly aria-label="Sicherungstext">'+JSON.stringify({v:1,sessions:state.sessions,swaps:state.swaps}).replace(/</g,"&lt;")+'</textarea>' +
+    '<button class="btn" data-act="copy">Text kopieren</button></section>' +
+    '<section class="card stack"><h3>Sicherung einspielen</h3><textarea id="backupIn" aria-label="Sicherungstext einfügen" placeholder="Sicherungstext hier einfügen"></textarea>' +
+    '<button class="btn ghost" data-act="import">Einspielen und aktuelle Einträge ersetzen</button></section>';
+  if(ui.backupMsg) h += '<p class="notice" role="status">'+ui.backupMsg+'</p>';
+  h += '<section class="card stack"><h3>Alles löschen</h3><p class="small muted">Entfernt alle Trainings und Startwerte von diesem Gerät.</p>' +
+       (ui.confirmReset ? '<div class="row"><button class="btn sm" data-act="reset">Ja, alles löschen</button><button class="btn sm ghost" data-act="noReset">Behalten</button></div>'
+                        : '<button class="btn ghost" data-act="askReset">Alle Einträge löschen</button>') + '</section>';
+  return h;
+}
+
+/* ---------- Dialoge ---------- */
+function openSheet(title,text,okLabel,okAct,cancelLabel){
+  sheet.className = "sheet"; sheet.hidden = false;
+  sheet.innerHTML = '<div class="card stack" role="dialog" aria-modal="true" aria-label="'+title+'"><h2>'+title+'</h2><p class="muted">'+text+'</p>' +
+    '<button class="btn" data-act="'+okAct+'">'+okLabel+'</button><button class="btn ghost" data-act="closeSheet">'+cancelLabel+'</button></div>';
+}
+function closeSheet(){ sheet.hidden = true; sheet.innerHTML = ""; }
+
+/* ---------- Pausen-Timer ---------- */
+var buzzed = true;
+function tick(){
+  var t = document.getElementById("restTime"); if(!t || !state.draft) return;
+  var left = Math.ceil((state.draft.restEnd - Date.now())/1000), lab = document.getElementById("restLabel"), skip = document.getElementById("skipRest");
+  if(left > 0){
+    t.textContent = Math.floor(left/60)+":"+("0"+left%60).slice(-2); lab.textContent = "Pause"; skip.hidden = false;
+  } else {
+    var m = Math.floor((Date.now()-state.draft.start)/6e4);
+    t.textContent = m+" min"; lab.textContent = "Trainingszeit"; skip.hidden = true;
+    if(!buzzed){ buzzed = true; try{ navigator.vibrate && navigator.vibrate([200,100,200]); }catch(e){} }
+  }
+}
+setInterval(tick,500);
+
+var lock = null;
+function wake(){ try{ if(navigator.wakeLock) navigator.wakeLock.request("screen").then(function(l){ lock = l; }).catch(function(){}); }catch(e){} }
+function unwake(){ try{ if(lock){ lock.release(); lock = null; } }catch(e){} }
+document.addEventListener("visibilitychange",function(){ if(!document.hidden && state.draft) wake(); });
+
+/* ---------- Ereignisse ---------- */
+function setOf(el){ return state.draft.items[+el.dataset.i].sets[+el.dataset.j]; }
+document.addEventListener("click",function(ev){
+  var el = ev.target.closest("[data-act]"); if(!el) return;
+  var act = el.dataset.act, s, it, inp, c;
+  switch(act){
+    case "tab": ui.tab = el.dataset.tab; ui.backupMsg = ""; ui.confirmReset = false; render(); window.scrollTo(0,0); break;
+    case "day": ui.day = el.dataset.day; render(); break;
+    case "swap":
+      var slot = null; ORDER.forEach(function(k){ DAYS[k].slots.forEach(function(x){ if(x.id === el.dataset.slot) slot = x; }); });
+      if(slot){ state.swaps[slot.id] = slot.opts[(slot.opts.indexOf(chosen(slot))+1) % slot.opts.length]; save(); render(); }
+      break;
+    case "start": startDraft(el.dataset.day); break;
+    case "inc": case "dec":
+      s = setOf(el); it = state.draft.items[+el.dataset.i];
+      var f = el.dataset.f, d = (act === "inc" ? 1 : -1) * (f === "w" ? EX[it.ex].step : 1);
+      s[f] = Math.max(0, Math.round((s[f] + d)*100)/100);
+      inp = document.getElementById(f+"-"+el.dataset.i+"-"+el.dataset.j); if(inp) inp.value = f === "w" ? de(s.w) : s.r;
+      // ein geändertes Gewicht gilt auch für die folgenden offenen Sätze
+      if(f === "w") it.sets.forEach(function(z,j){ if(j > +el.dataset.j && !z.done){ z.w = s.w; var o = document.getElementById("w-"+el.dataset.i+"-"+j); if(o) o.value = de(z.w); } });
+      save(); break;
+    case "check":
+      s = setOf(el); it = state.draft.items[+el.dataset.i];
+      s.done = !s.done; el.setAttribute("aria-pressed", s.done);
+      document.getElementById("set-"+el.dataset.i+"-"+el.dataset.j).classList.toggle("done", s.done);
+      c = doneCount();
+      if(s.done && c[0] < c[1]){ state.draft.restEnd = Date.now() + EX[it.ex].rest*1000; buzzed = false; }
+      else if(!s.done){ state.draft.restEnd = 0; buzzed = true; }
+      save(); updProg(); tick();
+      if(s.done && c[0] === c[1]) openSheet("Alle Sätze erledigt","Training speichern und abschließen?","Speichern","finish","Noch nicht");
+      break;
+    case "addSet":
+      it = state.draft.items[+el.dataset.i]; var l = it.sets[it.sets.length-1];
+      it.sets.push({w:l.w,r:l.r,done:false}); save(); render(); break;
+    case "skipRest": state.draft.restEnd = 0; buzzed = true; save(); tick(); break;
+    case "askFinish":
+      c = doneCount();
+      if(c[0] === 0) openSheet("Noch kein Satz abgehakt","Hake die Sätze ab, die du gemacht hast. Nur abgehakte Sätze werden gespeichert.","Weiter trainieren","closeSheet","Training verwerfen");
+      else if(c[0] < c[1]) openSheet("Noch "+(c[1]-c[0])+" Sätze offen","Gespeichert werden nur die abgehakten Sätze.","Trotzdem abschließen","finish","Weiter trainieren");
+      else openSheet("Training abschließen","Alle Sätze sind abgehakt.","Speichern","finish","Zurück");
+      if(c[0] === 0) sheet.querySelector(".btn.ghost").dataset.act = "discard";
+      break;
+    case "askCancel": openSheet("Training abbrechen?","Die Einträge von heute werden nicht gespeichert.","Verwerfen","discard","Weiter trainieren"); break;
+    case "discard": state.draft = null; save(); unwake(); closeSheet(); render(); window.scrollTo(0,0); break;
+    case "finish": finish(); break;
+    case "closeSheet": closeSheet(); break;
+    case "closeSummary": ui.summary = null; ui.tab = "train"; render(); window.scrollTo(0,0); break;
+    case "copy":
+      var out = document.getElementById("backupOut");
+      var fallback = function(){ out.focus(); out.select(); ui.backupMsg = "Text ist markiert. Jetzt lange drücken und Kopieren wählen."; render(); var o = document.getElementById("backupOut"); o.focus(); o.select(); };
+      try{ navigator.clipboard.writeText(out.value).then(function(){ ui.backupMsg = "Kopiert. Füge den Text in deine Notizen ein."; render(); }).catch(fallback); }catch(e){ fallback(); }
+      break;
+    case "import":
+      try{
+        var parsed = clean(JSON.parse(document.getElementById("backupIn").value));
+        if(!parsed) throw new Error("x");
+        parsed.draft = null; state = parsed; save();
+        ui.backupMsg = "Eingespielt: " + state.sessions.length + " Trainings.";
+      }catch(e){ ui.backupMsg = "Das ist kein gültiger Sicherungstext. Füge den kompletten Text ein, so wie er kopiert wurde."; }
+      render(); break;
+    case "askReset": ui.confirmReset = true; render(); break;
+    case "noReset": ui.confirmReset = false; render(); break;
+    case "reset": state = {v:1,sessions:[],swaps:{},draft:null}; save(); ui.confirmReset = false; ui.backupMsg = "Alle Einträge gelöscht."; render(); break;
+  }
+});
+document.addEventListener("change",function(ev){
+  var el = ev.target; if(!el.dataset || !el.dataset.f || !state.draft) return;
+  var s = setOf(el), f = el.dataset.f;
+  if(f === "w"){ s.w = Math.round(parseNum(el.value)*100)/100; el.value = de(s.w); }
+  else { s.r = Math.round(parseNum(el.value)); el.value = s.r; }
+  save();
+});
+document.addEventListener("focusin",function(ev){ if(ev.target.dataset && ev.target.dataset.f && ev.target.select) ev.target.select(); });
+
+load();
+if(state.draft) wake();
+render();
+})();
+</script>
+
+</body></html>

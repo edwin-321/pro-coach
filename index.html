@@ -104,11 +104,23 @@ details summary{cursor:pointer;color:var(--muted);font-size:14.5px;font-weight:7
 .pip.cur{background:var(--accent)}
 .rest{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--warn-soft);border-radius:var(--r);padding:10px 16px}
 .timer{font:800 30px var(--display);font-variant-numeric:tabular-nums}
-.field{display:flex;flex-direction:column;gap:8px}
-.bigstep{display:grid;grid-template-columns:64px minmax(0,1fr) 64px;align-items:center;gap:10px}
-.bigstep button{height:64px;border-radius:18px;background:var(--surface);border:2px solid var(--line);box-shadow:0 4px 0 var(--line);margin-bottom:4px;font:800 30px var(--display);color:var(--accent);transition:transform .06s,box-shadow .06s}
-.bigstep button:active{transform:translateY(4px);box-shadow:0 0 0 var(--line)}
-.bigstep input{width:100%;min-width:0;height:64px;border:0;border-radius:18px;background:var(--surface);color:var(--ink);text-align:center;font:800 40px var(--display);font-variant-numeric:tabular-nums;padding:0}
+.coach{background:var(--accent-soft);border-radius:12px;padding:10px 12px;font-size:14.5px;font-weight:600}
+.sets{display:flex;flex-direction:column;gap:8px}
+.sethead,.set{display:grid;grid-template-columns:20px 1fr 1fr 48px;gap:8px;align-items:center}
+.sethead{padding:0 8px}
+.sethead span{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:center}
+.set{padding:6px;border-radius:14px;border:2px solid var(--line)}
+.set .idx{text-align:center;font-weight:700;color:var(--muted)}
+.step{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;align-items:center;background:var(--bg);border-radius:10px}
+.step button{height:44px;font-size:20px;font-weight:700;color:var(--accent)}
+.step input{width:100%;min-width:0;height:44px;border:0;background:transparent;color:var(--ink);text-align:center;font:700 17px var(--body);font-variant-numeric:tabular-nums;padding:0}
+.check{width:48px;height:48px;border-radius:14px;border:2px solid var(--line);box-shadow:0 3px 0 var(--line);display:grid;place-items:center;color:transparent;transition:transform .06s}
+.check:active{transform:translateY(3px)}
+.check svg{width:22px;height:22px}
+.set.done{background:var(--good-soft);border-color:transparent}
+.set.done .check{background:var(--good);border-color:var(--good);box-shadow:0 3px 0 var(--good-d);color:var(--surface);animation:tickpop .3s ease-out}
+.set.done .step{background:transparent}
+@keyframes tickpop{50%{transform:scale(1.2)}}
 
 .dock{position:fixed;left:0;right:0;bottom:0;z-index:8;background:var(--surface);border-top:2px solid var(--line);
   padding:10px max(16px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))}
@@ -395,7 +407,6 @@ var DAILY = ["Du bist stärker, als du heute Morgen gedacht hast.","Jedes Traini
 var TOASTS = ["Sauber. Die Übung sitzt.","Stark gemacht.","Genau so wächst Kraft.","Du ziehst das richtig durch.","Das war klasse.","Du machst das großartig.","Wieder eine geschafft."];
 var HEADLINES = ["Stark gemacht!","Du hast geliefert!","Das hast du dir verdient!","Was für ein Training!","Du bist nicht zu stoppen!"];
 var AFTER = ["Sag dir einmal ehrlich: Das habe ich gut gemacht.","Spür kurz nach, wie kräftig sich dein Körper gerade anfühlt.","Du hast dir heute Zeit für dich genommen. Das zählt.","Lächle einmal. Du hast es durchgezogen."];
-var MID = ["Weiter so, gleiches Gewicht.","Du bist mittendrin. Sauber bleiben.","Letzter Satz. Gib alles, was sauber geht."];
 function pick(list){ return list[state.sessions.length % list.length]; }
 
 /* ---------- Bilder ---------- */
@@ -487,7 +498,11 @@ function render(){
   renderDock();
 }
 function renderDock(){
-  if(state.draft){ dock.innerHTML = '<div class="in"><button class="btn good" data-act="check">Satz geschafft</button></div>'; tick(); return; }
+  if(state.draft){
+    dock.innerHTML = '<div class="in row between"><div><div class="label" id="restLabel">Pause</div><div class="timer" id="restTime">0:00</div></div>' +
+      '<div class="row"><button class="link" data-act="skipRest" id="skipRest">überspringen</button><button class="btn good" style="width:auto" data-act="askFinish">Fertig</button></div></div>';
+    tick(); return;
+  }
   if(ui.summary){ dock.innerHTML = '<div class="in"><button class="btn" data-act="closeSummary">Weiter</button></div>'; return; }
   var tabs = [["train","Training"],["progress","Fortschritt"]];
   dock.innerHTML = '<nav class="in tabs" aria-label="Bereiche">' + tabs.map(function(t){
@@ -533,35 +548,38 @@ function startDraft(day){
   state.draft = {day:day,start:Date.now(),restEnd:0,items:items};
   save(); wake(); render(); window.scrollTo(0,0);
 }
-// der nächste offene Satz
-function pos(){
-  var it = state.draft.items, i, j;
-  for(i=0;i<it.length;i++) for(j=0;j<it[i].sets.length;j++) if(!it[i].sets[j].done && !it[i].sets[j].skip) return {i:i,j:j};
-  return null;
-}
 function counts(){ var d=0,h=0,t=0; state.draft.items.forEach(function(it){ it.sets.forEach(function(s){ t++; if(s.done) d++; if(s.done||s.skip) h++; }); }); return {done:d,handled:h,total:t}; }
 
 function viewWorkout(){
-  var dr = state.draft, p = pos(), c = counts();
-  if(!p) return "";
-  var it = dr.items[p.i], e = EX[it.ex], s = it.sets[p.j], n = it.sets.length;
-  var pips = it.sets.map(function(z,j){ return '<span class="pip'+(z.done?' on':(j===p.j?' cur':''))+'"></span>'; }).join("");
-  var say = p.j === 0 ? coachText(it) : (p.j === n-1 ? MID[2] : MID[(p.i+p.j) % 2]);
-  return '<div class="topbar"><button class="x" data-act="askEnd" aria-label="Training beenden">'+CLOSE+'</button><div class="bar" role="img" aria-label="'+c.handled+' von '+c.total+' Sätzen"><i style="width:'+(c.handled/c.total*100)+'%"></i></div></div>' +
-    '<div class="rest" id="restBox" hidden><div><div class="label">Pause</div><div class="timer" id="restTime">0:00</div></div><button class="link" data-act="skipRest">Pause überspringen</button></div>' +
-    '<div class="stack enter"><div class="label">Übung '+(p.i+1)+' von '+dr.items.length+' · '+e.eq+(e.side?' · je Seite':'')+'</div><h1>'+e.n+'</h1>' +
-    '<div class="row"><div class="pips" style="flex:1">'+pips+'</div><span class="small muted num">Satz '+(p.j+1)+' von '+n+'</span></div></div>' +
-    '<div class="say">'+mascot(p.j===0?"normal":"wink","sm")+'<p class="bubble">'+say+'</p></div>' +
-    bigField("w",p,de(s.w),"decimal","Gewicht in kg"+(e.hand?" je Hand":"")) +
-    bigField("r",p,s.r,"numeric","Wiederholungen · Ziel "+it.min+" bis "+it.max) +
-    '<details><summary>So geht die Übung</summary><p class="cue">'+e.cue+'</p></details>' +
-    '<button class="link quiet" data-act="skipEx" style="align-self:flex-start">Übung überspringen</button>';
+  var dr = state.draft, c = counts();
+  var h = '<div class="topbar"><button class="x" data-act="askEnd" aria-label="Training beenden">'+CLOSE+'</button><div class="bar" id="progbar" role="img" aria-label="Fortschritt"><i style="width:'+(c.done/c.total*100)+'%"></i></div><span class="small muted num" id="prog">'+c.done+' / '+c.total+'</span></div>' +
+          '<div class="stack"><div class="label">Tag '+dr.day+'</div><h1>'+DAYS[dr.day].title+'</h1></div>';
+  dr.items.forEach(function(it,i){
+    var e = EX[it.ex];
+    h += '<section class="card stack"><div><div class="label">'+e.eq+(e.side?' · je Seite':'')+'</div><h2>'+e.n+'</h2></div>' +
+         '<p class="num" style="font-weight:700">Ziel: '+kg(it.w,e)+' × '+it.min+'–'+it.max+' Wdh.</p>' +
+         '<p class="coach">'+coachText(it)+'</p>' +
+         '<details><summary>So geht die Übung</summary><p class="cue">'+e.cue+'</p></details>' +
+         '<div class="sets"><div class="sethead"><span></span><span>kg'+(e.hand?' je Hand':'')+'</span><span>Wdh.</span><span></span></div>';
+    it.sets.forEach(function(s,j){
+      h += '<div class="set'+(s.done?' done':'')+'" id="set-'+i+'-'+j+'"><span class="idx num">'+(j+1)+'</span>' +
+           stepper("w",i,j,de(s.w),"decimal","Gewicht Satz "+(j+1)) + stepper("r",i,j,s.r,"numeric","Wiederholungen Satz "+(j+1)) +
+           '<button class="check" data-act="check" data-i="'+i+'" data-j="'+j+'" aria-pressed="'+s.done+'" aria-label="Satz '+(j+1)+' geschafft">'+CHECK+'</button></div>';
+    });
+    h += '</div><button class="link quiet" data-act="addSet" data-i="'+i+'" style="align-self:flex-start">+ weiterer Satz</button></section>';
+  });
+  return h;
 }
-function bigField(f,p,val,mode,label){
-  var d = ' data-f="'+f+'" data-i="'+p.i+'" data-j="'+p.j+'"';
-  return '<div class="field"><span class="label">'+label+'</span><div class="bigstep"><button data-act="dec"'+d+' aria-label="weniger">−</button>' +
-    '<input id="'+f+'-'+p.i+'-'+p.j+'"'+d+' type="text" inputmode="'+mode+'" value="'+val+'" aria-label="'+label+'" autocomplete="off">' +
-    '<button data-act="inc"'+d+' aria-label="mehr">+</button></div></div>';
+function stepper(f,i,j,val,mode,label){
+  var d = ' data-f="'+f+'" data-i="'+i+'" data-j="'+j+'"';
+  return '<div class="step"><button data-act="dec"'+d+' aria-label="'+label+' weniger">−</button>' +
+    '<input id="'+f+'-'+i+'-'+j+'"'+d+' type="text" inputmode="'+mode+'" value="'+val+'" aria-label="'+label+'" autocomplete="off">' +
+    '<button data-act="inc"'+d+' aria-label="'+label+' mehr">+</button></div>';
+}
+function updProg(){
+  var c = counts(), p = document.getElementById("prog"), b = document.getElementById("progbar");
+  if(p) p.textContent = c.done+" / "+c.total;
+  if(b && b.firstChild) b.firstChild.style.width = (c.done/c.total*100)+"%";
 }
 
 function endWorkout(){
@@ -666,13 +684,12 @@ function closeSheet(){ sheet.hidden = true; sheet.innerHTML = ""; }
 /* ---------- Pausen-Timer ---------- */
 var buzzed = true;
 function tick(){
-  var box = document.getElementById("restBox"); if(!box || !state.draft) return;
-  var left = Math.ceil((state.draft.restEnd - Date.now())/1000);
+  var t = document.getElementById("restTime"); if(!t || !state.draft) return;
+  var left = Math.ceil((state.draft.restEnd - Date.now())/1000), lab = document.getElementById("restLabel"), skip = document.getElementById("skipRest");
   if(left > 0){
-    box.hidden = false;
-    document.getElementById("restTime").textContent = Math.floor(left/60)+":"+("0"+left%60).slice(-2);
+    t.textContent = Math.floor(left/60)+":"+("0"+left%60).slice(-2); lab.textContent = "Pause"; skip.hidden = false;
   } else {
-    box.hidden = true;
+    t.textContent = Math.floor((Date.now()-state.draft.start)/6e4)+" min"; lab.textContent = "Trainingszeit"; skip.hidden = true;
     if(!buzzed){ buzzed = true; tone([880,1175],0.25); try{ navigator.vibrate && navigator.vibrate([200,100,200]); }catch(e){} }
   }
 }
@@ -701,28 +718,34 @@ document.addEventListener("click",function(ev){
       var f = el.dataset.f, d = (act === "inc" ? 1 : -1) * (f === "w" ? EX[it.ex].step : 1);
       s[f] = Math.max(0, Math.round((s[f] + d)*100)/100);
       inp = document.getElementById(f+"-"+el.dataset.i+"-"+el.dataset.j); if(inp) inp.value = f === "w" ? de(s.w) : s.r;
-      // ein geändertes Gewicht gilt auch für die folgenden Sätze der Übung
-      if(f === "w") it.sets.forEach(function(z,j){ if(j > +el.dataset.j && !z.done) z.w = s.w; });
+      // ein geändertes Gewicht gilt auch für die folgenden offenen Sätze der Übung
+      if(f === "w") it.sets.forEach(function(z,j){ if(j > +el.dataset.j && !z.done){ z.w = s.w; var o = document.getElementById("w-"+el.dataset.i+"-"+j); if(o) o.value = de(z.w); } });
       save(); break;
     case "check":
-      p = pos(); if(!p) break;
-      it = state.draft.items[p.i]; it.sets[p.j].done = true;
-      tone([660,880],0.18); xpFloat("+10 XP");
-      if(!pos()){ finish(); break; }
-      state.draft.restEnd = Date.now() + EX[it.ex].rest*1000; buzzed = false;
-      save(); render(); window.scrollTo(0,0);
-      if(it.sets.every(function(z){ return z.done || z.skip; })) toast(TOASTS[(p.i + state.sessions.length) % TOASTS.length]);
+      it = state.draft.items[+el.dataset.i]; s = it.sets[+el.dataset.j];
+      s.done = !s.done; el.setAttribute("aria-pressed", s.done);
+      document.getElementById("set-"+el.dataset.i+"-"+el.dataset.j).classList.toggle("done", s.done);
+      c = counts();
+      if(s.done){
+        tone([660,880],0.18); xpFloat("+10 XP");
+        if(c.done < c.total){ state.draft.restEnd = Date.now() + EX[it.ex].rest*1000; buzzed = false; }
+        if(it.sets.every(function(z){ return z.done; }) && c.done < c.total) toast(TOASTS[(+el.dataset.i + state.sessions.length) % TOASTS.length]);
+      } else { state.draft.restEnd = 0; buzzed = true; }
+      save(); updProg(); tick();
+      if(s.done && c.done === c.total) finish();
       break;
-    case "skipEx":
-      p = pos(); if(!p) break;
-      state.draft.items[p.i].sets.forEach(function(z){ if(!z.done) z.skip = true; });
-      state.draft.restEnd = 0; buzzed = true;
-      if(!pos()){ endWorkout(); break; }
-      save(); render(); window.scrollTo(0,0); break;
+    case "addSet":
+      it = state.draft.items[+el.dataset.i]; var l = it.sets[it.sets.length-1];
+      it.sets.push({w:l.w,r:l.r,done:false,skip:false}); save(); render(); break;
     case "skipRest": state.draft.restEnd = 0; buzzed = true; save(); tick(); break;
+    case "askFinish":
+      c = counts();
+      if(c.done === c.total){ finish(); break; }
+      openSheet("Training beenden?", c.done ? "Es sind noch "+(c.total-c.done)+" Sätze offen. Deine "+c.done+" geschafften Sätze werden gespeichert." : "Du hast noch keinen Satz abgehakt. Es wird nichts gespeichert.", "Beenden", "endNow", "Weiter trainieren");
+      break;
     case "askEnd":
       c = counts();
-      openSheet("Training beenden?", c.done ? "Deine "+c.done+" geschafften Sätze werden gespeichert." : "Du hast noch keinen Satz geschafft. Es wird nichts gespeichert.", "Beenden", "endNow", "Weiter trainieren");
+      openSheet("Training beenden?", c.done ? "Deine "+c.done+" geschafften Sätze werden gespeichert." : "Du hast noch keinen Satz abgehakt. Es wird nichts gespeichert.", "Beenden", "endNow", "Weiter trainieren");
       break;
     case "endNow": endWorkout(); break;
     case "closeSheet": closeSheet(); break;
@@ -741,7 +764,6 @@ document.addEventListener("change",function(ev){
 document.addEventListener("focusin",function(ev){ if(ev.target.dataset && ev.target.dataset.f && ev.target.select) ev.target.select(); });
 
 load();
-if(state.draft && !pos()) state.draft = null;
 if(state.draft) wake();
 render();
 })();

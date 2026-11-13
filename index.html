@@ -1,5 +1,5 @@
-<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Po-Coach"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style></head><body>
-<title>Po-Coach</title>
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Pro-Trainer"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style></head><body>
+<title>Pro-Trainer</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
 <style>
@@ -120,12 +120,43 @@ textarea{width:100%;min-height:110px;border-radius:10px;border:1px solid var(--l
   padding:16px max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))}
 .sheet .card{width:100%;max-width:520px}
 .notice{background:var(--warn-soft);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px}
-@media (prefers-reduced-motion: reduce){.bar i{transition:none}}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.chip svg{width:16px;height:16px;flex:none}
+.chip.fire{color:var(--warn);background:var(--warn-soft);border-color:transparent}
+.chip.fire.off{color:var(--muted);background:var(--surface);border-color:var(--line)}
+.praise{background:var(--accent-soft);border-radius:var(--r);padding:14px 16px;font-family:var(--display);font-weight:600;font-size:18px;line-height:1.25;text-wrap:balance}
+.goal .bar{height:14px;border-radius:7px;flex:1}
+.goal .bar i{background:var(--accent);border-radius:7px}
+.prize{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--warn-soft);color:var(--warn);flex:none}
+.prize svg{width:24px;height:24px}
+.prize.won{background:var(--warn);color:var(--surface)}
+.path{display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0 4px}
+.node{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;font:800 17px var(--display);font-variant-numeric:tabular-nums;background:var(--bg);border:3px solid var(--line);color:var(--muted);box-shadow:0 4px 0 var(--line)}
+.node svg{width:26px;height:26px}
+.node.done{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);box-shadow:0 4px 0 var(--accent-soft)}
+.node.now{border-color:var(--accent);color:var(--accent);background:var(--surface);box-shadow:0 0 0 6px var(--accent-soft)}
+.node.prizeN{width:84px;height:84px;background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
+.node.prizeN svg{width:40px;height:40px}
+.node.prizeN.won{background:var(--warn);color:var(--surface)}
+.badges{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 10px}
+.bdg{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;font-size:12.5px;font-weight:700;line-height:1.2;min-width:0}
+.bdg i{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:var(--warn-soft);color:var(--warn)}
+.bdg i svg{width:26px;height:26px}
+.bdg span{font-weight:400;color:var(--muted);font-size:11.5px}
+.bdg.off{color:var(--muted)}
+.bdg.off i{background:var(--bg);color:var(--muted);opacity:.55}
+#toast{position:fixed;left:0;right:0;bottom:calc(96px + env(safe-area-inset-bottom, 0px));z-index:9;display:flex;justify-content:center;pointer-events:none;padding:0 16px}
+#toast div{background:var(--ink);color:var(--bg);font-weight:700;padding:10px 18px;border-radius:999px;animation:pop .25s ease-out}
+@keyframes pop{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
+#confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:30}
+@media (prefers-reduced-motion: reduce){.bar i{transition:none}#toast div{animation:none}}
 </style>
 
 <div id="app"></div>
 <div id="dock" class="dock"></div>
 <div id="sheet" hidden></div>
+<div id="toast" hidden role="status"></div>
 
 <script>
 (function(){
@@ -189,7 +220,7 @@ var KEY = "pocoach.v1";
 
 /* ---------- Speicher ---------- */
 var storageOk = true;
-var state = {v:1,sessions:[],swaps:{},draft:null};
+var state = {v:1,sessions:[],swaps:{},draft:null,reward:0};
 function load(){
   try{
     var raw = localStorage.getItem(KEY);
@@ -204,7 +235,7 @@ function numOr(x,d){ x = Number(x); return isFinite(x) && x >= 0 ? x : d; }
 // nimmt nur bekannte Felder und Zahlen an, damit eine eingespielte Sicherung nichts kaputt macht
 function clean(s){
   if(!s || typeof s !== "object" || !Array.isArray(s.sessions)) return null;
-  var out = {v:1,sessions:[],swaps:{},draft:null};
+  var out = {v:1,sessions:[],swaps:{},draft:null,reward:numOr(s.reward,0)};
   s.sessions.forEach(function(x){
     if(!x || !DAYS[x.day] || !Array.isArray(x.entries)) return;
     var t = Number(x.date); if(!isFinite(t)) return;
@@ -298,13 +329,79 @@ function nextDay(){
   return ORDER[(ORDER.indexOf(s[s.length-1].day)+1) % 3];
 }
 function monday(t){ var d = new Date(t); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay()+6)%7)); return d.getTime(); }
-function weekCount(){ var m = monday(Date.now()); return state.sessions.filter(function(s){ return s.date >= m; }).length; }
-function streak(){
-  var wk = 7*864e5, m = monday(Date.now()), n = 0;
-  function cnt(a){ return state.sessions.filter(function(s){ var x = monday(s.date); return x === a; }).length; }
-  if(cnt(m) >= 3) n++;
-  for(var a = monday(m - 3*864e5); cnt(a) >= 3; a = monday(a - 3*864e5)) n++;
+function dayKey(t){ var d = new Date(t); return d.getFullYear()+"-"+d.getMonth()+"-"+d.getDate(); }
+// Trainingstage in der Woche, die an diesem Montag beginnt (zwei Trainings am selben Tag zählen einmal)
+function daysIn(m){
+  var seen = {}, n = 0;
+  state.sessions.forEach(function(s){ if(monday(s.date) === m){ var k = dayKey(s.date); if(!seen[k]){ seen[k] = 1; n++; } } });
   return n;
+}
+function weekCount(){ return daysIn(monday(Date.now())); }
+function prevMon(m){ return monday(m - 3*864e5); }
+function nextMon(m){ return monday(m + 8*864e5); }
+// volle Wochen in Folge; die laufende Woche zählt, sobald sie voll ist, und unterbricht vorher nichts
+function streak(){
+  var m = monday(Date.now()), n = 0;
+  if(daysIn(m) >= 3) n++;
+  for(var a = prevMon(m); daysIn(a) >= 3; a = prevMon(a)) n++;
+  return n;
+}
+function weekStats(){
+  var full = 0, best = 0, run = 0;
+  if(!state.sessions.length) return {full:0,best:0};
+  var m = monday(Date.now());
+  for(var a = monday(state.sessions[0].date); a <= m; a = nextMon(a)){
+    if(daysIn(a) >= 3){ full++; run++; if(run > best) best = run; } else run = 0;
+  }
+  return {full:full,best:best};
+}
+function totalSets(){ return state.sessions.reduce(function(m,s){ return m + s.entries.reduce(function(k,e){ return k + e.sets.length; },0); },0); }
+// 10 XP pro Satz, 50 pro Training, 100 pro voller Woche
+function xp(){ return totalSets()*10 + state.sessions.length*50 + weekStats().full*100; }
+var LEVELS = [[0,"Einsteigerin"],[400,"Dranbleiberin"],[1200,"Kraftpaket"],[2400,"Powerfrau"],[4000,"Maschine"],[6000,"Ikone"],[9000,"Legende"]];
+function level(x){
+  var i = 0; while(i < LEVELS.length-1 && x >= LEVELS[i+1][0]) i++;
+  var lo = LEVELS[i][0], hi = i < LEVELS.length-1 ? LEVELS[i+1][0] : null;
+  return {n:i+1,title:LEVELS[i][1],hi:hi,next:hi?LEVELS[i+1][1]:"",pct:hi?(x-lo)/(hi-lo)*100:100};
+}
+var GOAL = 13; // ein Quartal
+function goalWeeks(){ return state.reward ? GOAL : Math.min(GOAL, streak()); }
+function badges(){
+  var ws = weekStats(), n = state.sessions.length, up = false;
+  Object.keys(EX).forEach(function(k){ if(EX[k].inv) return; var h = hist(k); if(h.length > 1 && topW(h[h.length-1].sets) > topW(h[0].sets)) up = true; });
+  var ht = hist("hipthrust").reduce(function(m,x){ return Math.max(m,topW(x.sets)); },0);
+  return [["Erster Schritt","1. Training",n>=1],["Volle Woche","3 Trainings in einer Woche",ws.full>=1],["Mehr Gewicht","bei einer Übung gesteigert",up],
+    ["Zehn geschafft","10 Trainings",n>=10],["Monat am Stück","4 volle Wochen in Folge",ws.best>=4],["Hip Thrust 60","60 kg bewegt",ht>=60],
+    ["Satz-Sammlerin","250 Sätze",totalSets()>=250],["Halbzeit","7 volle Wochen in Folge",ws.best>=7],["Quartal","13 Wochen in Folge",!!state.reward]];
+}
+var DAILY = ["Du bist stärker, als du heute Morgen gedacht hast.","Jedes Training ist ein Versprechen an dich selbst, das du hältst.","Dein Körper leistet jeden Tag viel für dich. Heute gibst du ihm etwas zurück.","Du musst heute nicht perfekt sein. Da sein reicht.","Stark sein steht dir.","Du trainierst für dich und für niemanden sonst.","Fortschritt sieht man nicht jeden Tag. Er passiert trotzdem.","Du darfst stolz auf dich sein, lange bevor du am Ziel bist.","Deine Ausdauer ist beeindruckend.","An manchen Tagen im Zyklus fühlt sich dasselbe Gewicht schwerer an. Das ist normal. Dann zählt, dass du da bist.","Du strahlst, wenn du etwas durchziehst.","Heute ist ein guter Tag, um nett zu dir zu sein und trotzdem alles zu geben."];
+var TOASTS = ["Sauber. Die Übung sitzt.","Stark gemacht.","Genau so wächst Kraft.","Du ziehst das richtig durch.","Das war klasse.","Du machst das großartig.","Wieder eine geschafft."];
+var HEADLINES = ["Stark gemacht.","Du hast geliefert.","Das hast du dir verdient.","Was für ein Training.","Du bist nicht zu stoppen."];
+var AFTER = ["Sag dir einmal ehrlich: Das habe ich gut gemacht.","Spür kurz nach, wie kräftig sich dein Körper gerade anfühlt.","Du hast dir heute Zeit für dich genommen. Das zählt.","Lächle einmal. Du hast es durchgezogen."];
+function pick(list){ return list[state.sessions.length % list.length]; }
+var FLAME = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c1 4 5.5 6 5.500 11.200A5.500 5.500 0 0 1 6.500 13.200c0-1.800.8-3.200 1.800-4.200.3 1.400 1 2.200 2 2.500C10 8.200 10.500 4.700 12 2z"/></svg>';
+var STAR = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3l2.700 5.600 6.100.800-4.500 4.300 1.100 6.100L12 16.900 6.600 19.800l1.100-6.100L3.200 9.400l6.100-.800z"/></svg>';
+var HEAD = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.500 14v-2a7.500 7.500 0 0 1 15 0v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="2.500" y="13" width="5" height="8" rx="2"/><rect x="16.500" y="13" width="5" height="8" rx="2"/></svg>';
+var LOCK = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8.500 11V8a3.500 3.500 0 0 1 7 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+var toastT = 0;
+function toast(msg){
+  var t = document.getElementById("toast"); t.innerHTML = "<div>"+msg+"</div>"; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(function(){ t.hidden = true; t.innerHTML = ""; }, 2200);
+}
+function confetti(n){
+  try{
+    if(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var cv = document.createElement("canvas"); cv.id = "confetti"; document.body.appendChild(cv);
+    var ctx = cv.getContext("2d"), W = cv.width = window.innerWidth, H = cv.height = window.innerHeight;
+    var cs = getComputedStyle(document.documentElement), cols = ["--accent","--good","--warn","--ink"].map(function(v){ return cs.getPropertyValue(v).trim(); });
+    var ps = [], t0 = Date.now(), i;
+    for(i=0;i<n;i++) ps.push({x:Math.random()*W,y:-Math.random()*H*0.6,vx:(Math.random()-0.5)*3,vy:2+Math.random()*4,s:5+Math.random()*6,r:Math.random()*6,c:cols[i%cols.length]});
+    (function frame(){
+      var el = Date.now() - t0; ctx.clearRect(0,0,W,H);
+      ps.forEach(function(p){ p.x += p.vx; p.y += p.vy; p.r += 0.15; ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.r); ctx.globalAlpha = Math.max(0,1-el/3000); ctx.fillStyle = p.c; ctx.fillRect(-p.s/2,-p.s/3,p.s,p.s*0.66); ctx.restore(); });
+      if(el < 3000) requestAnimationFrame(frame); else cv.remove();
+    })();
+  }catch(e){}
 }
 function dateStr(t){ return new Date(t).toLocaleDateString("de-DE",{weekday:"short",day:"numeric",month:"short"}); }
 function parseNum(v){ var x = parseFloat(String(v).replace(",",".")); return isFinite(x) && x >= 0 ? x : 0; }
@@ -342,7 +439,10 @@ function viewHome(){
   var nd = nextDay(), day = ui.day || nd, D = DAYS[day], wc = weekCount();
   var dots = ""; for(var i=0;i<3;i++) dots += '<span class="dot'+(i<wc?' on':'')+'"></span>';
   var weekTxt = wc >= 3 ? "Wochenziel geschafft" : wc + " von 3 Trainings diese Woche";
-  var h = '<header class="stack"><h1>Po-Coach</h1><div class="week" role="img" aria-label="'+weekTxt+'">'+dots+'<span class="small muted">'+weekTxt+'</span></div></header>';
+  var x = xp(), L = level(x), st = streak(), gw = goalWeeks();
+  var h = '<header class="stack"><h1>Pro-Trainer</h1><div class="chips"><span class="chip fire'+(st?'':' off')+'">'+FLAME+(st===1?'1 Woche':st+' Wochen')+'</span><span class="chip">'+STAR+de(x)+' XP</span><span class="chip">Level '+L.n+' · '+L.title+'</span></div>' +
+          '<div class="week" role="img" aria-label="'+weekTxt+'">'+dots+'<span class="small muted">'+weekTxt+'</span></div></header>' +
+          '<p class="praise">'+DAILY[Math.floor(Date.now()/864e5) % DAILY.length]+'</p>';
   if(!storageOk) h += '<p class="notice">Dieser Browser speichert gerade nichts dauerhaft (zum Beispiel im privaten Modus). Deine Einträge wären nach dem Schließen weg.</p>';
   h += '<div class="seg" role="group" aria-label="Trainingstag">' + ORDER.map(function(k){
     return '<button data-act="day" data-day="'+k+'" aria-pressed="'+(k===day)+'">Tag '+k+(k===nd?' ·  dran':'')+'</button>';
@@ -357,8 +457,11 @@ function viewHome(){
          '<button class="link" data-act="swap" data-slot="'+slot.id+'" aria-label="'+e.n+' gegen Alternative tauschen">tauschen</button></span></li>';
   });
   h += '</ul><button class="btn" data-act="start" data-day="'+day+'">Training starten</button></section>';
+  h += '<section class="card stack goal"><div class="row between"><div><div class="label">Dein Ziel</div><h3>'+(state.reward?'Kopfhörer verdient':'Neue Kopfhörer')+'</h3></div><span class="small muted num">'+gw+' von '+GOAL+' Wochen</span></div>' +
+       '<div class="row"><div class="bar"><i style="width:'+(gw/GOAL*100)+'%"></i></div><span class="prize'+(state.reward?' won':'')+'">'+HEAD+'</span></div>' +
+       '<p class="small muted">'+(state.reward ? 'Du warst 13 Wochen lang jede Woche mindestens dreimal trainieren. Die Kopfhörer gehören dir.' : 'Jede Woche mit mindestens 3 Trainings bringt dich ein Stück weiter. Nach 13 Wochen in Folge bekommst du die Kopfhörer geschenkt. Eine ausgelassene Woche setzt die Serie zurück.')+'</p></section>';
   h += '<section class="card stack"><h3>So steigerst du dich</h3>' +
-       '<p class="small muted">Der Coach gibt dir für jede Übung Gewicht und Wiederholungen vor. Schaffst du in allen Sätzen die obere Zahl, bekommst du beim nächsten Mal mehr Gewicht. Sonst bleibst du beim Gewicht und machst pro Satz eine Wiederholung mehr.</p>' +
+       '<p class="small muted">Dein Trainer gibt dir für jede Übung Gewicht und Wiederholungen vor. Schaffst du in allen Sätzen die obere Zahl, bekommst du beim nächsten Mal mehr Gewicht. Sonst bleibst du beim Gewicht und machst pro Satz eine Wiederholung mehr.</p>' +
        '<p class="small muted">Jeder Satz endet, wenn noch etwa 1 bis 2 saubere Wiederholungen möglich wären. Zwischen zwei Trainings liegt ein Ruhetag, zum Beispiel Montag, Mittwoch, Freitag.</p></section>';
   return h;
 }
@@ -423,22 +526,32 @@ function finish(){
   var mins = Math.max(1, Math.round((Date.now() - dr.start)/6e4));
   state.draft = null;
   if(entries.length){
+    var x0 = xp(), l0 = level(x0).n, w0 = weekCount(), won = false;
     state.sessions.push({date:Date.now(),day:dr.day,entries:entries});
-    ui.summary = {day:dr.day,sets:sets,vol:Math.round(vol),mins:mins,records:records,first:state.sessions.length===1};
+    if(!state.reward && streak() >= GOAL){ state.reward = Date.now(); won = true; }
+    var x1 = xp(), L = level(x1);
+    ui.summary = {day:dr.day,sets:sets,vol:Math.round(vol),mins:mins,records:records,first:state.sessions.length===1,
+      gain:x1-x0,levelUp:L.n>l0?L.title:"",weekDone:w0<3&&weekCount()>=3,won:won};
   }
   ui.day = null; save(); unwake(); closeSheet(); render(); window.scrollTo(0,0);
+  if(ui.summary) confetti(ui.summary.won ? 220 : 90);
 }
 function viewSummary(){
-  var s = ui.summary, wc = weekCount();
-  var h = '<header class="stack" style="padding-top:20px"><span class="badge good" style="align-self:flex-start">Tag '+s.day+' gespeichert</span><h1>Stark gemacht.</h1>' +
-          '<p class="muted">'+(wc>=3?"Wochenziel erreicht: drei Trainings.":"Das war Training "+wc+" von 3 in dieser Woche.")+' Nächstes Mal ist Tag '+nextDay()+' dran.</p></header>' +
-          '<div class="stats"><div class="stat"><b>'+s.sets+'</b><span class="small muted">Sätze</span></div><div class="stat"><b>'+de(s.vol)+'</b><span class="small muted">kg bewegt</span></div><div class="stat"><b>'+s.mins+'</b><span class="small muted">Minuten</span></div></div>';
+  var s = ui.summary, wc = weekCount(), gw = goalWeeks(), st = streak();
+  var h = '<header class="stack" style="padding-top:20px"><span class="badge good" style="align-self:flex-start">Tag '+s.day+' gespeichert</span><h1>'+pick(HEADLINES)+'</h1>' +
+          '<div class="chips"><span class="chip">'+STAR+'+'+de(s.gain)+' XP</span><span class="chip fire'+(st?'':' off')+'">'+FLAME+(st===1?'1 volle Woche':st+' volle Wochen')+' in Folge</span></div>' +
+          '<p class="muted">'+(wc>=3?"Wochenziel erreicht.":"Das war Training "+wc+" von 3 in dieser Woche.")+' Nächstes Mal ist Tag '+nextDay()+' dran.</p></header>';
+  if(s.won) h += '<section class="card stack" style="align-items:center;text-align:center"><span class="node prizeN won">'+HEAD+'</span><h2>Kopfhörer verdient!</h2><p class="muted">Du warst 13 Wochen lang jede Woche mindestens dreimal trainieren. Das schaffen die wenigsten. Zeig diese Seite vor und hol dir dein Geschenk ab.</p></section>';
+  else if(s.weekDone) h += '<section class="card stack goal"><h3>Woche geschafft</h3><div class="row"><div class="bar"><i style="width:'+(gw/GOAL*100)+'%"></i></div><span class="prize">'+HEAD+'</span></div><p class="small muted">'+gw+' von '+GOAL+' Wochen auf dem Weg zu deinen Kopfhörern.</p></section>';
+  if(s.levelUp) h += '<section class="card stack"><div class="label">Neues Level</div><h2>'+s.levelUp+'</h2></section>';
+  h += '<div class="stats"><div class="stat"><b>'+s.sets+'</b><span class="small muted">Sätze</span></div><div class="stat"><b>'+de(s.vol)+'</b><span class="small muted">kg bewegt</span></div><div class="stat"><b>'+s.mins+'</b><span class="small muted">Minuten</span></div></div>';
   if(s.records.length){
     h += '<section class="card stack"><h3>Neue Bestleistungen</h3>' + s.records.map(function(r){ return '<p class="num">'+r+'</p>'; }).join("") + '</section>';
   } else if(s.first){
-    h += '<section class="card"><p class="muted">Deine Startwerte stehen. Ab dem nächsten Training rechnet der Coach mit deinen echten Zahlen.</p></section>';
+    h += '<section class="card"><p class="muted">Deine Startwerte stehen. Ab dem nächsten Training rechnet der Trainer mit deinen echten Zahlen.</p></section>';
   }
-  h += '<section class="card"><p class="small muted">Für den Muskelaufbau zählt jetzt Erholung: genug Eiweiß (etwa 1,6 g pro kg Körpergewicht am Tag), ausreichend Schlaf und ein Tag Pause vor dem nächsten Training.</p></section>';
+  h += '<section class="card stack"><h3>Ein Moment für dich</h3><p>Atme dreimal tief ein und langsam wieder aus. '+pick(AFTER)+'</p>' +
+       '<p class="small muted">Für den Muskelaufbau zählt jetzt Erholung: genug Eiweiß (etwa 1,6 g pro kg Körpergewicht am Tag), ausreichend Schlaf und ein Tag Pause vor dem nächsten Training.</p></section>';
   return h;
 }
 
@@ -455,8 +568,23 @@ function spark(vals){
   return s + '<circle class="pt" cx="'+lastP[0]+'" cy="'+lastP[1]+'" r="4"/></svg>';
 }
 function viewProgress(){
+  var x = xp(), L = level(x), gw = goalWeeks(), wcN = weekCount(), i, off = [0,34,56,34,0,-34,-56,-34];
   var h = '<header><h1>Fortschritt</h1></header>' +
-    '<div class="stats"><div class="stat"><b>'+state.sessions.length+'</b><span class="small muted">Trainings</span></div><div class="stat"><b>'+weekCount()+'/3</b><span class="small muted">diese Woche</span></div><div class="stat"><b>'+streak()+'</b><span class="small muted">volle Wochen in Folge</span></div></div>';
+    '<section class="card stack"><div class="row between"><div><div class="label">Level '+L.n+'</div><h2>'+L.title+'</h2></div><span class="chip">'+STAR+de(x)+' XP</span></div>' +
+    '<div class="bar" style="height:10px;border-radius:5px"><i style="width:'+L.pct+'%;background:var(--warn)"></i></div>' +
+    '<p class="small muted">'+(L.hi ? 'Noch '+de(L.hi-x)+' XP bis '+L.next+'. Jeder Satz bringt 10 XP, jedes Training 50, jede volle Woche 100.' : 'Höchstes Level erreicht.')+'</p></section>' +
+    '<div class="stats"><div class="stat"><b>'+state.sessions.length+'</b><span class="small muted">Trainings</span></div><div class="stat"><b>'+wcN+'/3</b><span class="small muted">diese Woche</span></div><div class="stat"><b>'+streak()+'</b><span class="small muted">volle Wochen in Folge</span></div></div>';
+  h += '<section class="card stack"><div><div class="label">Dein Weg</div><h2>'+(state.reward?'Kopfhörer verdient':'13 Wochen bis zu den Kopfhörern')+'</h2></div><div class="path">';
+  for(i=0;i<GOAL;i++){
+    var cls = i < gw ? " done" : (i === gw && wcN < 3 ? " now" : "");
+    var inner = i < gw ? CHECK : (i === gw && wcN < 3 ? wcN+"/3" : (i+1));
+    h += '<span class="node'+cls+'" style="transform:translateX('+off[i%8]+'px)" role="img" aria-label="Woche '+(i+1)+(i<gw?' geschafft':'')+'">'+inner+'</span>';
+  }
+  h += '<span class="node prizeN'+(state.reward?' won':'')+'" style="transform:translateX('+off[GOAL%8]+'px)" role="img" aria-label="Kopfhörer">'+HEAD+'</span></div>' +
+       '<p class="small muted">'+(state.reward ? 'Geschafft am '+dateStr(state.reward)+'. Die Kopfhörer gehören dir.' : 'Jede Woche mit mindestens 3 Trainings schaltet ein Feld frei. Nach 13 Wochen in Folge bekommst du die Kopfhörer geschenkt. Eine ausgelassene Woche setzt die Serie zurück.')+'</p></section>';
+  h += '<section class="card stack"><h3>Abzeichen</h3><div class="badges">' + badges().map(function(b){
+    return '<div class="bdg'+(b[2]?'':' off')+'"><i>'+(b[2]?STAR:LOCK)+'</i>'+b[0]+'<span>'+b[1]+'</span></div>';
+  }).join("") + '</div></section>';
   if(!state.sessions.length){
     return h + '<section class="card stack"><h3>Noch keine Einträge</h3><p class="muted">Nach deinem ersten Training siehst du hier für jede Übung, wie sich dein Gewicht entwickelt und was deine Bestleistung ist.</p></section>';
   }
@@ -480,7 +608,7 @@ function viewProgress(){
 
 function viewSettings(){
   var h = '<header class="stack"><h1>Sicherung</h1><p class="muted">Deine Einträge liegen nur in diesem Browser auf diesem Handy. Kopiere ab und zu eine Sicherung, zum Beispiel in deine Notizen. Damit kannst du alles wiederherstellen oder auf ein neues Handy mitnehmen.</p></header>' +
-    '<section class="card stack"><h3>Sicherung kopieren</h3><textarea id="backupOut" readonly aria-label="Sicherungstext">'+JSON.stringify({v:1,sessions:state.sessions,swaps:state.swaps}).replace(/</g,"&lt;")+'</textarea>' +
+    '<section class="card stack"><h3>Sicherung kopieren</h3><textarea id="backupOut" readonly aria-label="Sicherungstext">'+JSON.stringify({v:1,sessions:state.sessions,swaps:state.swaps,reward:state.reward}).replace(/</g,"&lt;")+'</textarea>' +
     '<button class="btn" data-act="copy">Text kopieren</button></section>' +
     '<section class="card stack"><h3>Sicherung einspielen</h3><textarea id="backupIn" aria-label="Sicherungstext einfügen" placeholder="Sicherungstext hier einfügen"></textarea>' +
     '<button class="btn ghost" data-act="import">Einspielen und aktuelle Einträge ersetzen</button></section>';
@@ -548,6 +676,7 @@ document.addEventListener("click",function(ev){
       if(s.done && c[0] < c[1]){ state.draft.restEnd = Date.now() + EX[it.ex].rest*1000; buzzed = false; }
       else if(!s.done){ state.draft.restEnd = 0; buzzed = true; }
       save(); updProg(); tick();
+      if(s.done && c[0] < c[1] && it.sets.every(function(z){ return z.done; })) toast(TOASTS[(+el.dataset.i + state.sessions.length) % TOASTS.length]);
       if(s.done && c[0] === c[1]) openSheet("Alle Sätze erledigt","Training speichern und abschließen?","Speichern","finish","Noch nicht");
       break;
     case "addSet":
@@ -581,7 +710,7 @@ document.addEventListener("click",function(ev){
       render(); break;
     case "askReset": ui.confirmReset = true; render(); break;
     case "noReset": ui.confirmReset = false; render(); break;
-    case "reset": state = {v:1,sessions:[],swaps:{},draft:null}; save(); ui.confirmReset = false; ui.backupMsg = "Alle Einträge gelöscht."; render(); break;
+    case "reset": state = {v:1,sessions:[],swaps:{},draft:null,reward:0}; save(); ui.confirmReset = false; ui.backupMsg = "Alle Einträge gelöscht."; render(); break;
   }
 });
 document.addEventListener("change",function(ev){

@@ -634,7 +634,7 @@ function viewCardio(){
   h += '<section class="card stack"><h3>Was machst du heute?</h3><div class="opts" role="group" aria-label="Cardio-Art">' + Object.keys(CARDIO).map(function(k){
          return '<button class="opt" data-act="cAct" data-k="'+k+'" aria-pressed="'+(k===c.act)+'">'+CARDIO[k].n+'</button>';
        }).join("") + '</div><p class="coach">'+CARDIO[c.act].tip+'</p></section>';
-  h += '<section class="card stack"><div><h3>Dauer</h3><p class="small muted">Nach '+c.min+' Minuten bekommst du ein Signal. Trag zum Schluss ein, wie lange du wirklich warst.</p></div>' +
+  h += '<section class="card stack"><div><h3>Dauer</h3><p class="small muted">Nach <span id="cMinTxt">'+c.min+'</span> Minuten bekommst du ein Signal. Trag zum Schluss ein, wie lange du wirklich warst.</p></div>' +
        '<div class="step big"><button data-act="cMin" data-d="-5" aria-label="5 Minuten weniger">−</button>' +
        '<input id="cMin" type="text" inputmode="numeric" value="'+c.min+'" aria-label="Dauer in Minuten" autocomplete="off">' +
        '<button data-act="cMin" data-d="5" aria-label="5 Minuten mehr">+</button></div><p class="small muted" style="text-align:center">Minuten</p></section>';
@@ -658,6 +658,9 @@ function setCardioMin(m){
   var c = state.draft.cardio; c.min = Math.max(5, Math.min(300, Math.round(m)));
   if(c.min*60 > cardioSec()) c.hit = false;
   save();
+  var inp = document.getElementById("cMin"), txt = document.getElementById("cMinTxt");
+  if(inp) inp.value = c.min; if(txt) txt.textContent = c.min;
+  cardioTick();
 }
 function askCardioFinish(){
   var c = state.draft.cardio, real = Math.round(cardioSec()/60), n = CARDIO[c.act].n;
@@ -839,7 +842,7 @@ document.addEventListener("click",function(ev){
     case "startCardio": startCardio(); break;
     case "cAct": state.draft.cardio.act = el.dataset.k; save(); render(); break;
     case "cLvl": state.draft.cardio.lvl = el.dataset.k; save(); render(); break;
-    case "cMin": setCardioMin(state.draft.cardio.min + (+el.dataset.d)); render(); break;
+    case "cMin": setCardioMin(state.draft.cardio.min + (+el.dataset.d)); break;
     case "cSave": finishCardio(+el.dataset.m); break;
     case "inc": case "dec":
       it = state.draft.items[+el.dataset.i]; s = it.sets[+el.dataset.j];
@@ -884,7 +887,7 @@ document.addEventListener("click",function(ev){
 });
 document.addEventListener("change",function(ev){
   var el = ev.target;
-  if(el.id === "cMin" && isCardio()){ setCardioMin(parseNum(el.value) || 5); render(); return; }
+  if(el.id === "cMin" && isCardio()){ setCardioMin(parseNum(el.value) || 5); return; }
   if(!el.dataset || !el.dataset.f || !state.draft) return;
   var it = state.draft.items[+el.dataset.i], s = it.sets[+el.dataset.j], f = el.dataset.f;
   if(f === "w"){

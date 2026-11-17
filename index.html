@@ -81,6 +81,13 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:var(--bg);border-radius:14px;padding:4px}
 .seg button{min-height:40px;border-radius:10px;font-weight:700;font-size:14.5px;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.seg.four{grid-template-columns:repeat(4,1fr)}
+/* Cardio: Auswahl der Aktivität */
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.opt{min-height:52px;padding:8px 12px;border-radius:14px;border:2px solid var(--line);background:var(--surface);font-weight:700;font-size:15px;text-align:left;line-height:1.2}
+.opt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.step.big{grid-template-columns:52px minmax(0,1fr) 52px}
+.step.big input{font-size:22px}
 .plan{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .plan li{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:12px 0;border-top:1px solid var(--line)}
 .plan li:first-child{border-top:0;padding-top:4px}
@@ -238,6 +245,16 @@ var DAYS = {
     {id:"c6",opts:["abd","abd_kabel"],sets:2,min:12,max:20}]}
 };
 var ORDER = ["A","B","C"];
+// Cardio ist ein eigener Trainingstag ("K"). Er zählt fürs Wochenziel, verschiebt aber die Reihenfolge A, B, C nicht.
+var CARDIO = {
+  laufband:{n:"Laufband",tip:"Stell 8 bis 12 % Steigung ein und geh zügig. Nicht am Geländer festhalten, dann arbeitet der Po mit."},
+  crosstrainer:{n:"Crosstrainer",tip:"Aufrecht stehen und den Druck über die Fersen geben. Ab und zu rückwärts treten, dann spürst du den Po mehr."},
+  rad:{n:"Fahrrad-Ergometer",tip:"Sattel so hoch, dass das Knie unten fast gestreckt ist. Lieber gleichmäßig treten als kurz zu schnell."},
+  stepper:{n:"Stepper oder Treppe",tip:"Ganzen Fuß aufsetzen, über die Ferse hochdrücken, Oberkörper leicht vorlehnen. Nur leicht abstützen."},
+  rudern:{n:"Rudergerät",tip:"Erst die Beine strecken, dann den Oberkörper zurück, dann mit den Armen ziehen. Zurück in umgekehrter Reihenfolge."},
+  draussen:{n:"Laufen oder Walken",tip:"Wähl ein Tempo, das du die ganze Zeit durchhältst. Hügel sind ein Extra für den Po."}
+};
+var LVL = {l:["Locker","Du kannst dich dabei noch gut unterhalten."],m:["Mittel","Reden geht nur noch in kurzen Sätzen."],h:["Intensiv","Reden fällt dir schwer."]};
 var KEY = "pocoach.v1";
 
 /* ---------- Speicher ---------- */
@@ -268,8 +285,14 @@ function clean(s){
   if(!s || typeof s !== "object" || !Array.isArray(s.sessions)) return null;
   var out = {v:1,sessions:[],swaps:{},draft:null,reward:numOr(s.reward,0)};
   s.sessions.forEach(function(x){
-    if(!x || !DAYS[x.day] || !Array.isArray(x.entries)) return;
+    if(!x) return;
     var t = Number(x.date); if(!isFinite(t)) return;
+    if(x.day === "K"){
+      var c = x.cardio, m = Math.round(numOr(c && c.min,0));
+      if(c && CARDIO[c.act] && LVL[c.lvl] && m > 0) out.sessions.push({date:t,day:"K",entries:[],cardio:{act:c.act,min:m,lvl:c.lvl}});
+      return;
+    }
+    if(!DAYS[x.day] || !Array.isArray(x.entries)) return;
     var entries = [];
     x.entries.forEach(function(e){
       if(!e || !EX[e.ex] || !Array.isArray(e.sets)) return;
@@ -283,7 +306,11 @@ function clean(s){
     Object.keys(s.swaps).forEach(function(k){ if(EX[s.swaps[k]]) out.swaps[k] = s.swaps[k]; });
   }
   var d = s.draft;
-  if(d && DAYS[d.day] && Array.isArray(d.items)){
+  if(d && d.day === "K" && d.cardio && CARDIO[d.cardio.act]){
+    out.draft = {day:"K",start:numOr(d.start,Date.now()),restEnd:0,items:[],
+      cardio:{act:d.cardio.act,min:Math.max(5,Math.round(numOr(d.cardio.min,30))),lvl:LVL[d.cardio.lvl]?d.cardio.lvl:"m",hit:!!d.cardio.hit}};
+  }
+  else if(d && DAYS[d.day] && Array.isArray(d.items)){
     var items = [];
     d.items.forEach(function(it){
       if(!it || !EX[it.ex] || !Array.isArray(it.sets)) return;
@@ -354,9 +381,12 @@ function de(n){ return Number(n).toLocaleString("de-DE",{maximumFractionDigits:2
 function kg(w,e){ if(!w) return "ohne Gewicht"; return de(w) + " kg" + (e && e.hand ? " je Hand" : ""); }
 function chosen(slot){ var c = state.swaps[slot.id]; return slot.opts.indexOf(c) >= 0 ? c : slot.opts[0]; }
 function nextDay(){
-  var s = state.sessions; if(!s.length) return "A";
+  var s = state.sessions.filter(function(x){ return x.day !== "K"; }); if(!s.length) return "A";
   return ORDER[(ORDER.indexOf(s[s.length-1].day)+1) % 3];
 }
+function cardioList(){ return state.sessions.filter(function(x){ return x.cardio; }); }
+function cardioMins(list){ return (list || cardioList()).reduce(function(m,x){ return m + x.cardio.min; },0); }
+function isCardio(){ return !!(state.draft && state.draft.day === "K"); }
 function monday(t){ var d = new Date(t); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay()+6)%7)); return d.getTime(); }
 function dayKey(t){ var d = new Date(t); return d.getFullYear()+"-"+d.getMonth()+"-"+d.getDate(); }
 // Trainingstage in der Woche, die an diesem Montag beginnt (zwei Trainings am selben Tag zählen einmal)
@@ -385,8 +415,8 @@ function weekStats(){
   return {full:full,best:best};
 }
 function totalSets(){ return state.sessions.reduce(function(m,s){ return m + s.entries.reduce(function(k,e){ return k + e.sets.length; },0); },0); }
-// 10 XP pro Satz, 50 pro Training, 100 pro voller Woche
-function xp(){ return totalSets()*10 + state.sessions.length*50 + weekStats().full*100; }
+// 10 XP pro Satz, 3 pro Cardio-Minute, 50 pro Training, 100 pro voller Woche
+function xp(){ return totalSets()*10 + cardioMins()*3 + state.sessions.length*50 + weekStats().full*100; }
 var LEVELS = [[0,"Einsteigerin"],[400,"Dranbleiberin"],[1200,"Kraftpaket"],[2400,"Powerfrau"],[4000,"Maschine"],[6000,"Ikone"],[9000,"Legende"]];
 function level(x){
   var i = 0; while(i < LEVELS.length-1 && x >= LEVELS[i+1][0]) i++;
@@ -493,7 +523,8 @@ var app = document.getElementById("app"), dock = document.getElementById("dock")
 
 function render(){
   var html;
-  if(state.draft) html = viewWorkout();
+  if(isCardio()) html = viewCardio();
+  else if(state.draft) html = viewWorkout();
   else if(ui.summary) html = viewSummary();
   else if(ui.tab === "progress") html = viewProgress();
   else html = viewHome();
@@ -501,6 +532,11 @@ function render(){
   renderDock();
 }
 function renderDock(){
+  if(isCardio()){
+    dock.innerHTML = '<div class="in row between"><div><div class="label">Cardio-Zeit</div><div class="timer" id="cTime">0:00</div></div>' +
+      '<button class="btn good" style="width:auto" data-act="askFinish">Fertig</button></div>';
+    tick(); return;
+  }
   if(state.draft){
     dock.innerHTML = '<div class="in row between"><div><div class="label" id="restLabel">Pause</div><div class="timer" id="restTime">0:00</div></div>' +
       '<div class="row"><button class="link" data-act="skipRest" id="skipRest">überspringen</button><button class="btn good" style="width:auto" data-act="askFinish">Fertig</button></div></div>';
@@ -514,21 +550,31 @@ function renderDock(){
 }
 
 function viewHome(){
-  var nd = nextDay(), day = ui.day || nd, D = DAYS[day], wc = weekCount(), x = xp(), st = streak(), gw = goalWeeks();
+  var nd = nextDay(), day = ui.day || nd, D = DAYS[day] || {title:"Cardio",slots:[]}, wc = weekCount(), x = xp(), st = streak(), gw = goalWeeks();
   var dots = ""; for(var i=0;i<3;i++) dots += '<span class="dot'+(i<wc?' on':'')+'"></span>';
   var weekTxt = wc >= 3 ? "Wochenziel geschafft" : wc + " von 3 Trainings diese Woche";
   var mins = Math.round(D.slots.reduce(function(m,s){ return m + s.sets; },0)*3/5)*5;
   var h = '<header class="row between"><h1>Pro-Trainer</h1><div class="chips"><span class="chip fire'+(st?'':' off')+'" role="img" aria-label="'+st+' volle Wochen in Folge">'+FLAME+st+'</span><span class="chip" role="img" aria-label="'+x+' XP">'+STAR+de(x)+'</span></div></header>';
   if(!storageOk) h += '<p class="notice">Dieser Browser speichert gerade nichts dauerhaft (zum Beispiel im privaten Modus). Deine Einträge wären nach dem Schließen weg.</p>';
   h += '<div class="say">'+mascot(wc>=3?"cheer":"normal")+'<p class="bubble">'+DAILY[Math.floor(Date.now()/864e5) % DAILY.length]+'</p></div>';
+  var seg = '<div class="seg four" role="group" aria-label="Trainingstag">' + ORDER.concat("K").map(function(k){
+         return '<button data-act="day" data-day="'+k+'" aria-pressed="'+(k===day)+'">'+(k==="K"?'Cardio':'Tag '+k)+'</button>';
+       }).join("") + '</div>';
+  var weekRow = '<div class="week" role="img" aria-label="'+weekTxt+'">'+dots+'<span class="small muted">'+weekTxt+'</span></div>';
+  if(day === "K"){
+    h += '<section class="card stack"><div><div class="label">Ausgewählt</div><h2>Cardio</h2></div>' +
+         '<p class="muted">Laufband, Crosstrainer, Rad und mehr · Dauer wählst du selbst</p>' + weekRow +
+         '<button class="btn" data-act="startCardio">Cardio starten</button>' +
+         '<details id="planBox"'+(ui.planOpen?' open':'')+'><summary>Anderen Trainingstag wählen</summary><div class="stack" style="padding-top:10px">'+seg+
+         '<p class="small muted">Cardio zählt als Training für dein Wochenziel. Danach geht es mit Tag '+nd+' weiter.</p></div></details></section>';
+    return h + goalCard(gw);
+  }
   h += '<section class="card stack"><div><div class="label">'+(day===nd?'Heute dran':'Ausgewählt')+'</div><h2>Tag '+day+' · '+D.title+'</h2></div>' +
-       '<p class="muted">'+D.slots.length+' Übungen · etwa '+mins+' Minuten</p>' +
-       '<div class="week" role="img" aria-label="'+weekTxt+'">'+dots+'<span class="small muted">'+weekTxt+'</span></div>' +
+       '<p class="muted">'+D.slots.length+' Übungen · etwa '+mins+' Minuten</p>' + weekRow +
        '<button class="btn" data-act="start" data-day="'+day+'">Training starten</button>' +
+       '<button class="btn ghost" data-act="startCardio">Heute lieber Cardio</button>' +
        '<details id="planBox"'+(ui.planOpen?' open':'')+'><summary>Übungen ansehen oder ändern</summary><div class="stack" style="padding-top:10px">' +
-       '<div class="seg" role="group" aria-label="Trainingstag">' + ORDER.map(function(k){
-         return '<button data-act="day" data-day="'+k+'" aria-pressed="'+(k===day)+'">Tag '+k+'</button>';
-       }).join("") + '</div><ul class="plan">';
+       seg + '<ul class="plan">';
   D.slots.forEach(function(slot){
     var ex = chosen(slot), e = EX[ex], r = recommend(ex,slot);
     h += '<li><span class="name">'+e.n+'</span><span class="target num">'+(r.w?de(r.w)+" kg":"ohne Gew.")+'</span>' +
@@ -536,10 +582,12 @@ function viewHome(){
          '<button class="link" data-act="swap" data-slot="'+slot.id+'" aria-label="'+e.n+' gegen Alternative tauschen">tauschen</button></span></li>';
   });
   h += '</ul></div></details></section>';
-  h += '<section class="card stack goal"><div class="row between"><div><div class="label">Dein Ziel</div><h3>'+(state.reward?'Kopfhörer verdient':'Neue Kopfhörer')+'</h3></div><span class="small muted num">'+gw+' von '+GOAL+' Wochen</span></div>' +
+  return h + goalCard(gw);
+}
+function goalCard(gw){
+  return '<section class="card stack goal"><div class="row between"><div><div class="label">Dein Ziel</div><h3>'+(state.reward?'Kopfhörer verdient':'Neue Kopfhörer')+'</h3></div><span class="small muted num">'+gw+' von '+GOAL+' Wochen</span></div>' +
        '<div class="row"><div class="bar"><i style="width:'+(gw/GOAL*100)+'%"></i></div><span class="prize'+(state.reward?' won':'')+'">'+HEAD+'</span></div>' +
        '<p class="small muted">'+(state.reward ? 'Du warst 13 Wochen lang jede Woche mindestens dreimal trainieren. Die Kopfhörer gehören dir.' : 'Jede Woche mit 3 Trainings bringt dich ein Stück weiter. Nach 13 Wochen in Folge gehören die Kopfhörer dir.')+'</p></section>';
-  return h;
 }
 
 function startDraft(day){
@@ -573,6 +621,69 @@ function viewWorkout(){
   });
   return h;
 }
+function startCardio(){
+  var l = cardioList(), last = l.length ? l[l.length-1].cardio : null;
+  state.draft = {day:"K",start:Date.now(),restEnd:0,items:[],cardio:{act:last?last.act:"laufband",min:last?last.min:30,lvl:last?last.lvl:"m",hit:false}};
+  save(); wake(); render(); window.scrollTo(0,0);
+}
+function cardioSec(){ return Math.max(0, Math.floor((Date.now() - state.draft.start)/1000)); }
+function viewCardio(){
+  var c = state.draft.cardio, sec = cardioSec();
+  var h = '<div class="topbar"><button class="x" data-act="askEnd" aria-label="Cardio abbrechen">'+CLOSE+'</button><div class="bar" id="progbar" role="img" aria-label="Fortschritt"><i style="width:'+Math.min(100,sec/(c.min*60)*100)+'%"></i></div><span class="small muted num" id="prog">'+Math.floor(sec/60)+' / '+c.min+' Min.</span></div>' +
+          '<div class="stack"><div class="label">Cardio-Tag</div><h1>Cardio</h1></div>';
+  h += '<section class="card stack"><h3>Was machst du heute?</h3><div class="opts" role="group" aria-label="Cardio-Art">' + Object.keys(CARDIO).map(function(k){
+         return '<button class="opt" data-act="cAct" data-k="'+k+'" aria-pressed="'+(k===c.act)+'">'+CARDIO[k].n+'</button>';
+       }).join("") + '</div><p class="coach">'+CARDIO[c.act].tip+'</p></section>';
+  h += '<section class="card stack"><div><h3>Dauer</h3><p class="small muted">Nach '+c.min+' Minuten bekommst du ein Signal. Trag zum Schluss ein, wie lange du wirklich warst.</p></div>' +
+       '<div class="step big"><button data-act="cMin" data-d="-5" aria-label="5 Minuten weniger">−</button>' +
+       '<input id="cMin" type="text" inputmode="numeric" value="'+c.min+'" aria-label="Dauer in Minuten" autocomplete="off">' +
+       '<button data-act="cMin" data-d="5" aria-label="5 Minuten mehr">+</button></div><p class="small muted" style="text-align:center">Minuten</p></section>';
+  h += '<section class="card stack"><h3>Intensität</h3><div class="seg" role="group" aria-label="Intensität">' + Object.keys(LVL).map(function(k){
+         return '<button data-act="cLvl" data-k="'+k+'" aria-pressed="'+(k===c.lvl)+'">'+LVL[k][0]+'</button>';
+       }).join("") + '</div><p class="small muted">'+LVL[c.lvl][1]+'</p></section>';
+  return h;
+}
+function cardioTick(){
+  var c = state.draft.cardio, sec = cardioSec(), t = document.getElementById("cTime"), p = document.getElementById("prog"), b = document.getElementById("progbar");
+  if(t) t.textContent = Math.floor(sec/60)+":"+("0"+sec%60).slice(-2);
+  if(p) p.textContent = Math.floor(sec/60)+" / "+c.min+" Min.";
+  if(b && b.firstChild) b.firstChild.style.width = Math.min(100,sec/(c.min*60)*100)+"%";
+  if(!c.hit && sec >= c.min*60){
+    c.hit = true; save();
+    tone([523,659,784],0.3); try{ navigator.vibrate && navigator.vibrate([200,100,200]); }catch(e){}
+    toast("Ziel erreicht! Stark durchgezogen.");
+  }
+}
+function setCardioMin(m){
+  var c = state.draft.cardio; c.min = Math.max(5, Math.min(300, Math.round(m)));
+  if(c.min*60 > cardioSec()) c.hit = false;
+  save();
+}
+function askCardioFinish(){
+  var c = state.draft.cardio, real = Math.round(cardioSec()/60), n = CARDIO[c.act].n;
+  var btns = '';
+  if(real >= 1) btns += '<button class="btn" data-act="cSave" data-m="'+real+'">'+real+' Minuten speichern</button>';
+  if(real !== c.min) btns += '<button class="btn'+(real>=1?' ghost':'')+'" data-act="cSave" data-m="'+c.min+'">'+c.min+' Minuten speichern</button>';
+  sheet.className = "sheet"; sheet.hidden = false;
+  sheet.innerHTML = '<div class="card stack" role="dialog" aria-modal="true" aria-label="Cardio speichern"><h2>Cardio speichern?</h2>' +
+    '<p class="muted">'+n+(real>=1?', bisher '+real+' Minuten mitgelaufen.':'. Die Zeit lief noch keine Minute mit, trag einfach ein, wie lange du warst.')+'</p>' +
+    btns + '<button class="btn ghost" data-act="closeSheet">Weiter trainieren</button></div>';
+}
+function finishCardio(m){
+  var c = state.draft.cardio, l = cardioList(), prevBest = l.reduce(function(x,s){ return Math.max(x,s.cardio.min); },0);
+  m = Math.max(1, Math.round(m));
+  var x0 = xp(), l0 = level(x0).n, w0 = weekCount(), won = false, now = Date.now();
+  state.draft = null;
+  state.sessions.push({date:now,day:"K",entries:[],cardio:{act:c.act,min:m,lvl:c.lvl}});
+  if(!state.reward && streak() >= GOAL){ state.reward = now; won = true; }
+  var x1 = xp(), L = level(x1), m0 = monday(now);
+  ui.summary = {cardio:true,act:c.act,lvl:c.lvl,mins:m,count:l.length+1,
+    weekMins:cardioMins(cardioList().filter(function(s){ return monday(s.date) === m0; })),
+    records:prevBest && m > prevBest ? ["Längste Cardio-Einheit: "+m+" Minuten"] : [],
+    gain:x1-x0,levelUp:L.n>l0?L.title:"",weekDone:w0<3&&weekCount()>=3,won:won};
+  ui.day = null; save(); unwake(); closeSheet(); render(); window.scrollTo(0,0);
+  confetti(won ? 220 : 110); tone([523,659,784,1047],0.35); countUp("xpGain",ui.summary.gain);
+}
 function stepper(f,i,j,val,mode,label){
   var d = ' data-f="'+f+'" data-i="'+i+'" data-j="'+j+'"';
   return '<div class="step"><button data-act="dec"'+d+' aria-label="'+label+' weniger">−</button>' +
@@ -586,7 +697,7 @@ function updProg(){
 }
 
 function endWorkout(){
-  if(counts().done) finish();
+  if(!isCardio() && counts().done) finish();
   else { state.draft = null; save(); unwake(); closeSheet(); render(); window.scrollTo(0,0); }
 }
 function finish(){
@@ -624,7 +735,8 @@ function viewSummary(){
   if(s.won) h += '<section class="card stack" style="align-items:center;text-align:center"><span class="node prizeN won">'+HEAD+'</span><h2>Kopfhörer verdient!</h2><p class="muted">Du warst 13 Wochen lang jede Woche mindestens dreimal trainieren. Das schaffen die wenigsten. Zeig diese Seite vor und hol dir dein Geschenk ab.</p></section>';
   else if(s.weekDone) h += '<section class="card stack goal"><h3>Woche geschafft</h3><div class="row"><div class="bar"><i style="width:'+(gw/GOAL*100)+'%"></i></div><span class="prize">'+HEAD+'</span></div><p class="small muted">'+gw+' von '+GOAL+' Wochen auf dem Weg zu deinen Kopfhörern.</p></section>';
   if(s.levelUp) h += '<section class="card stack" style="text-align:center"><div class="label">Neues Level</div><h2>'+s.levelUp+'</h2></section>';
-  h += '<div class="stats"><div class="stat"><b>'+s.sets+'</b><span class="small muted">Sätze</span></div><div class="stat"><b>'+de(s.vol)+'</b><span class="small muted">kg bewegt</span></div><div class="stat"><b>'+s.mins+'</b><span class="small muted">Minuten</span></div></div>';
+  if(s.cardio) h += '<div class="stats"><div class="stat"><b>'+s.mins+'</b><span class="small muted">Minuten '+CARDIO[s.act].n+'</span></div><div class="stat"><b>'+s.weekMins+'</b><span class="small muted">Cardio-Min. diese Woche</span></div><div class="stat"><b>'+s.count+'</b><span class="small muted">Cardio-Tage gesamt</span></div></div>';
+  else h += '<div class="stats"><div class="stat"><b>'+s.sets+'</b><span class="small muted">Sätze</span></div><div class="stat"><b>'+de(s.vol)+'</b><span class="small muted">kg bewegt</span></div><div class="stat"><b>'+s.mins+'</b><span class="small muted">Minuten</span></div></div>';
   if(s.records.length) h += '<section class="card stack"><h3>Neue Bestleistungen</h3>' + s.records.map(function(r){ return '<p class="num">'+r+'</p>'; }).join("") + '</section>';
   h += '<section class="card stack"><h3>Ein Moment für dich</h3><p>Atme dreimal tief ein und langsam wieder aus. '+pick(AFTER)+'</p></section>';
   return h;
@@ -662,6 +774,13 @@ function viewProgress(){
   if(!state.sessions.length){
     return h + '<div class="say">'+mascot("wink","sm")+'<p class="bubble">Nach deinem ersten Training siehst du hier, wie deine Gewichte steigen.</p></div>';
   }
+  var cl = cardioList();
+  if(cl.length){
+    var cv = cl.map(function(s){ return s.cardio.min; }), cb = Math.max.apply(null,cv);
+    h += '<section class="card stack"><div class="row between"><div><div class="label">Cardio</div><h2>'+de(cardioMins(cl))+' Minuten</h2></div><span class="small muted num">'+cl.length+(cl.length===1?' Einheit':' Einheiten')+'</span></div>' +
+         spark(cv.slice(-20)) + '<div class="row between small muted"><span>zuletzt '+CARDIO[cl[cl.length-1].cardio.act].n+'</span><span class="num">längste '+cb+' Min.</span></div></section>';
+  }
+  if(cl.length === state.sessions.length) return h;
   var seen = {}, order = [];
   ORDER.forEach(function(k){ DAYS[k].slots.forEach(function(sl){ sl.opts.forEach(function(y){ if(!seen[y]){ seen[y]=1; order.push(y); } }); }); });
   h += '<h2>Deine Gewichte</h2>';
@@ -687,6 +806,7 @@ function closeSheet(){ sheet.hidden = true; sheet.innerHTML = ""; }
 /* ---------- Pausen-Timer ---------- */
 var buzzed = true;
 function tick(){
+  if(isCardio()){ cardioTick(); return; }
   var t = document.getElementById("restTime"); if(!t || !state.draft) return;
   var left = Math.ceil((state.draft.restEnd - Date.now())/1000), lab = document.getElementById("restLabel"), skip = document.getElementById("skipRest");
   if(left > 0){
@@ -716,6 +836,11 @@ document.addEventListener("click",function(ev){
       if(slot){ state.swaps[slot.id] = slot.opts[(slot.opts.indexOf(chosen(slot))+1) % slot.opts.length]; ui.planOpen = true; save(); render(); }
       break;
     case "start": startDraft(el.dataset.day); break;
+    case "startCardio": startCardio(); break;
+    case "cAct": state.draft.cardio.act = el.dataset.k; save(); render(); break;
+    case "cLvl": state.draft.cardio.lvl = el.dataset.k; save(); render(); break;
+    case "cMin": setCardioMin(state.draft.cardio.min + (+el.dataset.d)); render(); break;
+    case "cSave": finishCardio(+el.dataset.m); break;
     case "inc": case "dec":
       it = state.draft.items[+el.dataset.i]; s = it.sets[+el.dataset.j];
       var f = el.dataset.f, d = (act === "inc" ? 1 : -1) * (f === "w" ? EX[it.ex].step : 1);
@@ -742,11 +867,13 @@ document.addEventListener("click",function(ev){
       it.sets.push({w:l.w,r:l.r,done:false,skip:false}); save(); render(); break;
     case "skipRest": state.draft.restEnd = 0; buzzed = true; save(); tick(); break;
     case "askFinish":
+      if(isCardio()){ askCardioFinish(); break; }
       c = counts();
       if(c.done === c.total){ finish(); break; }
       openSheet("Training beenden?", c.done ? "Es sind noch "+(c.total-c.done)+" Sätze offen. Deine "+c.done+" geschafften Sätze werden gespeichert." : "Du hast noch keinen Satz abgehakt. Es wird nichts gespeichert.", "Beenden", "endNow", "Weiter trainieren");
       break;
     case "askEnd":
+      if(isCardio()){ openSheet("Cardio abbrechen?", "Es wird nichts gespeichert. Wenn du fertig bist, tipp lieber unten auf Fertig.", "Abbrechen", "endNow", "Weiter trainieren"); break; }
       c = counts();
       openSheet("Training beenden?", c.done ? "Deine "+c.done+" geschafften Sätze werden gespeichert." : "Du hast noch keinen Satz abgehakt. Es wird nichts gespeichert.", "Beenden", "endNow", "Weiter trainieren");
       break;
@@ -756,7 +883,9 @@ document.addEventListener("click",function(ev){
   }
 });
 document.addEventListener("change",function(ev){
-  var el = ev.target; if(!el.dataset || !el.dataset.f || !state.draft) return;
+  var el = ev.target;
+  if(el.id === "cMin" && isCardio()){ setCardioMin(parseNum(el.value) || 5); render(); return; }
+  if(!el.dataset || !el.dataset.f || !state.draft) return;
   var it = state.draft.items[+el.dataset.i], s = it.sets[+el.dataset.j], f = el.dataset.f;
   if(f === "w"){
     s.w = Math.round(parseNum(el.value)*100)/100; el.value = de(s.w);
@@ -764,7 +893,7 @@ document.addEventListener("change",function(ev){
   } else { s.r = Math.round(parseNum(el.value)); el.value = s.r; }
   save();
 });
-document.addEventListener("focusin",function(ev){ if(ev.target.dataset && ev.target.dataset.f && ev.target.select) ev.target.select(); });
+document.addEventListener("focusin",function(ev){ if(ev.target.dataset && (ev.target.dataset.f || ev.target.id === "cMin") && ev.target.select) ev.target.select(); });
 
 load();
 if(state.draft) wake();

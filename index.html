@@ -283,6 +283,16 @@ function load(){
 }
 function save(){
   try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){ storageOk = false; }
+  if(state.sessions.length || state.draft) keepData();
+}
+// Bittet den Browser, die Einträge nicht von selbst aufzuräumen (einmal pro Start, sobald es etwas zu schützen gibt)
+var keepAsked = false;
+function keepData(){
+  if(keepAsked) return; keepAsked = true;
+  try{
+    var st = navigator.storage; if(!st || !st.persist || !st.persisted) return;
+    st.persisted().then(function(p){ if(!p) return st.persist(); }).catch(function(){});
+  }catch(e){}
 }
 function numOr(x,d){ x = Number(x); return isFinite(x) && x >= 0 ? x : d; }
 // nimmt nur bekannte Felder und Zahlen an

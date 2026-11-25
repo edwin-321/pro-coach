@@ -264,7 +264,7 @@ var KEY = "pocoach.v1";
 
 /* ---------- Speicher ---------- */
 var storageOk = true;
-var state = {v:1,sessions:[],swaps:{},draft:null,reward:0};
+var state = {v:1,sessions:[],swaps:{},draft:null,reward:0,backupAt:0};
 function load(){
   // Einmaliger Neustart: die Test-Einträge der ersten Version werden beiseitegelegt, alle fangen bei null an.
   try{
@@ -298,7 +298,7 @@ function numOr(x,d){ x = Number(x); return isFinite(x) && x >= 0 ? x : d; }
 // nimmt nur bekannte Felder und Zahlen an
 function clean(s){
   if(!s || typeof s !== "object" || !Array.isArray(s.sessions)) return null;
-  var out = {v:1,sessions:[],swaps:{},draft:null,reward:numOr(s.reward,0)};
+  var out = {v:1,sessions:[],swaps:{},draft:null,reward:numOr(s.reward,0),backupAt:numOr(s.backupAt,0)};
   s.sessions.forEach(function(x){
     if(!x) return;
     var t = Number(x.date); if(!isFinite(t)) return;
@@ -337,6 +337,114 @@ function clean(s){
     if(items.length && numOr(d.past,0)) out.draft.past = numOr(d.past,0);
   }
   return out;
+}
+
+/* ---------- Sicherung als Link ---------- */
+// Alle Trainings stecken komprimiert hinter dem # im Link. Dieser Teil wird nie an den Server geschickt.
+var BK = "#sicherung=";
+function packState(){
+  return {v:2,
+    s:state.sessions.map(function(x){
+      var t = Math.floor(x.date/1000);
+      if(x.cardio) return [t,"K",x.cardio.act,x.cardio.min,x.cardio.lvl];
+      return [t,x.day,x.entries.map(function(e){ var a = [e.ex]; e.sets.forEach(function(z){ a.push(z.w,z.r); }); return a; })];
+    }),
+    w:state.swaps, r:state.reward ? Math.floor(state.reward/1000) : 0};
+}
+function unpack(o){
+  if(!o || o.v !== 2 || !Array.isArray(o.s)) return null;
+  var sessions = o.s.map(function(a){
+    if(!Array.isArray(a)) return null;
+    if(a[1] === "K") return {date:a[0]*1000,day:"K",entries:[],cardio:{act:a[2],min:a[3],lvl:a[4]}};
+    return {date:a[0]*1000,day:a[1],entries:(Array.isArray(a[2])?a[2]:[]).map(function(e){
+      var sets = []; if(Array.isArray(e)) for(var i=1;i+1<e.length;i+=2) sets.push({w:e[i],r:e[i+1]});
+      return {ex:Array.isArray(e)?e[0]:"",sets:sets};
+    })};
+  });
+  return clean({sessions:sessions,swaps:o.w||{},reward:(o.r||0)*1000});
+}
+function b64(bytes){
+  var str = "", i; for(i=0;i<bytes.length;i+=8192) str += String.fromCharCode.apply(null, bytes.subarray(i,i+8192));
+  return btoa(str).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function unb64(t){
+  t = t.replace(/-/g,"+").replace(/_/g,"/"); while(t.length % 4) t += "=";
+  var str = atob(t), a = new Uint8Array(str.length); for(var i=0;i<str.length;i++) a[i] = str.charCodeAt(i); return a;
+}
+function makeLink(){
+  var json = JSON.stringify(packState()), base = location.href.split("#")[0];
+  if(window.CompressionStream && window.Response && window.Blob){
+    return new Response(new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer()
+      .then(function(buf){ return base + BK + "z" + b64(new Uint8Array(buf)); });
+  }
+  return Promise.resolve(base + BK + "j" + b64(new TextEncoder().encode(json)));
+}
+// liest einen Sicherungs-Link und gibt die geprüften Daten zurück
+function readLink(str){
+  return new Promise(function(ok,fail){
+    var m = /#sicherung=([zj])([A-Za-z0-9_-]+)/.exec(String(str || "")); if(!m) return fail();
+    var bytes = unb64(m[2]);
+    if(m[1] === "j") return ok(new TextDecoder().decode(bytes));
+    if(!window.DecompressionStream) return fail();
+    new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text().then(ok, fail);
+  }).then(function(txt){ var b = unpack(JSON.parse(txt)); if(!b) throw new Error("leer"); return b; });
+}
+// fügt fehlende Trainings aus der Sicherung hinzu, löscht nichts
+function mergeIn(b){
+  var have = {}, added = 0;
+  state.sessions.forEach(function(x){ have[Math.floor(x.date/1000)] = 1; });
+  b.sessions.forEach(function(x){ if(!have[Math.floor(x.date/1000)]){ state.sessions.push(x); added++; } });
+  state.sessions.sort(function(a,c){ return a.date - c.date; });
+  if(!state.reward && b.reward) state.reward = b.reward;
+  Object.keys(b.swaps).forEach(function(k){ if(!state.swaps[k]) state.swaps[k] = b.swaps[k]; });
+  save(); return added;
+}
+function backupDue(){ return state.sessions.length > 0 && Date.now() - (state.backupAt || 0) > 7*864e5; }
+var bkUrl = "";
+// Link vorbereiten, damit das Teilen-Menü beim Tippen sofort aufgeht
+function prepBackup(){
+  if(!state.sessions.length || !document.querySelector('[data-act="backup"]')) return;
+  makeLink().then(function(u){ bkUrl = u; }).catch(function(){ bkUrl = ""; });
+}
+function backupDone(msg){
+  state.backupAt = Date.now(); save(); toast(msg);
+  if(ui.summary) ui.summary.backupDue = false;
+  render();
+}
+function shareBackup(){
+  if(!bkUrl){ toast("Einen Moment, der Link wird erstellt."); prepBackup(); return; }
+  var url = bkUrl, n = state.sessions.length;
+  var text = "Meine Pro-Trainer-Sicherung vom "+dateStr(Date.now())+" ("+n+(n===1?" Training":" Trainings")+"). Zum Wiederherstellen den Link öffnen.";
+  if(navigator.share){
+    navigator.share({title:"Pro-Trainer Sicherung",text:text,url:url}).then(function(){ backupDone("Sicherung geteilt."); })
+      .catch(function(e){ if(!e || e.name !== "AbortError") copyBackup(url); });
+  } else copyBackup(url);
+}
+function copyBackup(url){
+  var show = function(){
+    sheet.className = "sheet"; sheet.hidden = false;
+    sheet.innerHTML = '<div class="card stack" role="dialog" aria-modal="true" aria-label="Sicherungs-Link"><h2>Sicherungs-Link</h2><p class="muted">Lange auf den Text drücken, Kopieren wählen und dir den Link zum Beispiel per WhatsApp oder Mail schicken.</p>' +
+      '<textarea class="field" id="bkOut" readonly style="min-height:120px;padding:10px;font-size:13px">'+url+'</textarea>' +
+      '<button class="btn" data-act="bkCopied">Habe ich kopiert</button><button class="btn ghost" data-act="closeSheet">Schließen</button></div>';
+    var o = document.getElementById("bkOut"); if(o){ o.focus(); o.select(); }
+  };
+  try{ navigator.clipboard.writeText(url).then(function(){ backupDone("Link kopiert. Schick ihn dir zum Beispiel per WhatsApp oder Mail."); }, show); }catch(e){ show(); }
+}
+function offerRestore(b){
+  if(!b.sessions.length){ toast("In dieser Sicherung sind keine Trainings."); return; }
+  ui.restore = b;
+  var last = b.sessions[b.sessions.length-1], n = b.sessions.length, m = state.sessions.length;
+  sheet.className = "sheet"; sheet.hidden = false;
+  sheet.innerHTML = '<div class="card stack" role="dialog" aria-modal="true" aria-label="Sicherung einspielen"><h2>Sicherung gefunden</h2>' +
+    '<p class="muted">Darin: '+n+(n===1?' Training':' Trainings')+' (das letzte am '+dateStr(last.date)+'). Auf diesem Gerät '+(m===1?'ist':'sind')+' gerade '+m+' gespeichert.</p>' +
+    '<p class="muted">Beim Einspielen kommen fehlende Trainings dazu. Es wird nichts gelöscht. Spiel nur deine eigene Sicherung ein.</p>' +
+    '<button class="btn" data-act="restoreOk">Einspielen</button><button class="btn ghost" data-act="closeSheet">Nicht einspielen</button></div>';
+}
+function checkHash(){
+  if(location.hash.indexOf(BK) !== 0) return;
+  var h = location.hash;
+  try{ history.replaceState(null, "", location.href.split("#")[0]); }catch(e){}
+  readLink(h).then(offerRestore, function(){ toast("Dieser Sicherungs-Link ist unvollständig oder beschädigt."); });
 }
 
 /* ---------- Trainer-Logik ---------- */
@@ -570,6 +678,7 @@ function render(){
   else html = viewHome();
   app.innerHTML = html;
   renderDock();
+  prepBackup();
 }
 function renderDock(){
   if(isPast()){
@@ -746,7 +855,7 @@ function finishCardio(m){
   ui.summary = {cardio:true,past:past,act:c.act,lvl:c.lvl,mins:m,count:l.length+1,
     weekMins:cardioMins(cardioList().filter(function(s){ return monday(s.date) === m0; })),
     records:!past && prevBest && m > prevBest ? ["Längste Cardio-Einheit: "+m+" Minuten"] : [],
-    gain:x1-x0,levelUp:L.n>l0?L.title:"",weekDone:w0<3&&daysIn(m0)>=3,won:won};
+    gain:x1-x0,levelUp:L.n>l0?L.title:"",weekDone:w0<3&&daysIn(m0)>=3,won:won,backupDue:backupDue()};
   ui.day = null; save(); unwake(); closeSheet(); render(); window.scrollTo(0,0);
   confetti(won ? 220 : 110); tone([523,659,784,1047],0.35); countUp("xpGain",ui.summary.gain);
 }
@@ -790,7 +899,7 @@ function finish(){
     if(!state.reward && streak() >= GOAL){ state.reward = Date.now(); won = true; }
     var x1 = xp(), L = level(x1);
     ui.summary = {day:dr.day,past:past,ex:entries.length,sets:sets,vol:Math.round(vol),mins:mins,records:past?[]:records,
-      gain:x1-x0,levelUp:L.n>l0?L.title:"",weekDone:w0<3&&daysIn(m0)>=3,won:won};
+      gain:x1-x0,levelUp:L.n>l0?L.title:"",weekDone:w0<3&&daysIn(m0)>=3,won:won,backupDue:backupDue()};
   }
   ui.day = null; save(); unwake(); closeSheet(); render(); window.scrollTo(0,0);
   if(ui.summary){ confetti(ui.summary.won ? 220 : 110); tone([523,659,784,1047],0.35); countUp("xpGain",ui.summary.gain); }
@@ -805,6 +914,7 @@ function viewSummary(){
   if(s.levelUp) h += '<section class="card stack" style="text-align:center"><div class="label">Neues Level</div><h2>'+s.levelUp+'</h2></section>';
   if(s.cardio) h += '<div class="stats"><div class="stat"><b>'+s.mins+'</b><span class="small muted">Minuten '+CARDIO[s.act].n+'</span></div><div class="stat"><b>'+s.weekMins+'</b><span class="small muted">Cardio-Min. '+(s.past?'in der Woche':'diese Woche')+'</span></div><div class="stat"><b>'+s.count+'</b><span class="small muted">Cardio-Tage gesamt</span></div></div>';
   else h += '<div class="stats"><div class="stat"><b>'+s.sets+'</b><span class="small muted">Sätze</span></div><div class="stat"><b>'+de(s.vol)+'</b><span class="small muted">kg bewegt</span></div>'+(s.past?'<div class="stat"><b>'+s.ex+'</b><span class="small muted">Übungen</span></div>':'<div class="stat"><b>'+s.mins+'</b><span class="small muted">Minuten</span></div>')+'</div>';
+  if(s.backupDue) h += '<section class="card stack"><div><div class="label">Sicherung</div><h3>Zeit für eine Sicherung</h3></div><p class="small muted">Schick dir deinen Sicherungs-Link, zum Beispiel per WhatsApp oder Mail. Damit holst du alle Trainings zurück, falls das Handy verloren geht oder die Daten gelöscht werden.</p><button class="btn ghost" data-act="backup">Sicherungs-Link teilen</button></section>';
   if(s.records.length) h += '<section class="card stack"><h3>Neue Bestleistungen</h3>' + s.records.map(function(r){ return '<p class="num">'+r+'</p>'; }).join("") + '</section>';
   h += '<section class="card stack"><h3>Ein Moment für dich</h3><p>Atme dreimal tief ein und langsam wieder aus. '+pick(AFTER)+'</p></section>';
   return h;
@@ -849,6 +959,11 @@ function viewProgress(){
     if(all.length > 8) h += '<button class="link" data-act="histAll" style="align-self:flex-start">'+(ui.histAll?'weniger anzeigen':'alle '+all.length+' anzeigen')+'</button>';
   } else h += '<p class="small muted">Noch keine Trainings. Hast du schon vor der App trainiert? Dann trag es hier nach.</p>';
   h += '</section>';
+  h += '<section class="card stack"><div><div class="label">Sicherung</div><h3>Deine Daten als Link</h3></div>' +
+       (state.sessions.length ? '<p class="small muted">'+(state.backupAt ? 'Letzte Sicherung: '+dateStr(state.backupAt) : 'Noch keine Sicherung.')+' Schick den Link dir selbst oder jemandem, dem du vertraust. Wer ihn öffnet, kann deine Trainings einspielen. Mach ab und zu einen neuen, damit die neuesten Trainings drin sind.</p>' +
+       '<button class="btn" data-act="backup">Sicherungs-Link teilen</button>' : '<p class="small muted">Sobald du trainiert hast, kannst du hier einen Sicherungs-Link teilen.</p>') +
+       '<details'+(state.sessions.length?'':' open')+'><summary>Sicherung einspielen</summary><div class="stack" style="padding-top:8px"><p class="small muted">Öffne einfach den Link. Oder füg ihn hier ein, zum Beispiel wenn die App auf dem Home-Bildschirm liegt.</p>' +
+       '<input class="field" id="restoreIn" type="url" placeholder="Sicherungs-Link einfügen" autocomplete="off"><button class="btn ghost" data-act="restorePaste">Einspielen</button></div></details></section>';
   if(!state.sessions.length){
     return h + '<div class="say">'+mascot("wink","sm")+'<p class="bubble">Nach deinem ersten Training siehst du hier, wie deine Gewichte steigen.</p></div>';
   }
@@ -934,6 +1049,16 @@ document.addEventListener("click",function(ev){
       if(ui.past.day === "K") startCardio(pt); else startDraft(ui.past.day, pt);
       break;
     case "histAll": ui.histAll = !ui.histAll; render(); break;
+    case "backup": shareBackup(); break;
+    case "bkCopied": closeSheet(); backupDone("Gut, jetzt den Link an dich schicken."); break;
+    case "restorePaste":
+      var ri = document.getElementById("restoreIn");
+      readLink(ri ? ri.value : "").then(offerRestore, function(){ toast("Das ist kein vollständiger Sicherungs-Link."); });
+      break;
+    case "restoreOk":
+      var added = ui.restore ? mergeIn(ui.restore) : 0; ui.restore = null; closeSheet(); render();
+      toast(added ? added+(added===1?" Training":" Trainings")+" wiederhergestellt." : "Alle Trainings waren schon da.");
+      break;
     case "delAsk":
       var ds = null; state.sessions.forEach(function(x){ if(String(x.date) === el.dataset.t) ds = x; });
       if(ds){ ui.del = ds.date; openSheet("Training löschen?", sessionLabel(ds)+" vom "+dateStr(ds.date)+" wird endgültig gelöscht.", "Löschen", "delNow", "Behalten"); }
@@ -1011,6 +1136,8 @@ document.addEventListener("focusin",function(ev){ if(ev.target.dataset && (ev.ta
 load();
 if(state.draft) wake();
 render();
+checkHash();
+window.addEventListener("hashchange", checkHash);
 })();
 </script>
 
